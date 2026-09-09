@@ -74,16 +74,28 @@ def fmt(lines):
     return re.sub(r'\s+',' ',s).strip()
 
 def blocks(ps):
-    t='\n'.join(ps);ms=list(re.finditer(r'(?m)^\s*(\d{1,3})\s*\.\s*',t));c=[(m.start(),int(m.group(1))) for m in ms if int(m.group(1))<=500];runs=[]
+    t='\n'.join(ps)
+    ms=list(re.finditer(r'(?m)^\s*(\d{1,3})\s*\.\s*',t))
+    c=[(m.start(),int(m.group(1))) for m in ms if int(m.group(1))<=500]
+    runs=[]
     for i,(p,n) in enumerate(c):
-        if n!=1:continue
-        run=[(p,n)];last=1
+        if n!=1: continue
+        run=[(p,n)]; last=1
         for p2,n2 in c[i+1:]:
             if n2==last+1:
-                run.append((p2,n2));last=n2;continue
+                run.append((p2,n2)); last=n2; continue
+            if last>=10 and 1<=n2<=4: continue
             break
-        if len(run)>=3:runs.append(run)
-    r=max(runs,key=len,default=[]);return [(n,t[p:r[i+1][0] if i+1<len(r) else len(t)]) for i,(p,n) in enumerate(r)]
+        if len(run)>=3:
+            nextpos=c[i+1][0] if i+1<len(c) else len(t)
+            first_block=t[p:nextpos]
+            option_count=len(re.findall(r'\((?:1|2|3|4)\)',first_block))
+            question_words=len(re.findall(r'\b(?:what|which|find|calculate|given|consider|identify|determine|select|choose|the)\b',first_block,re.I))
+            score=(len(run),option_count,question_words,len(first_block))
+            runs.append((score,run))
+    if not runs: return []
+    r=max(runs,key=lambda z:z[0])[1]
+    return [(n,t[p:r[i+1][0] if i+1<len(r) else len(t)]) for i,(p,n) in enumerate(r)]
 
 def parse(n,b):
     ls=[]
