@@ -79,9 +79,8 @@ def blocks(ps):
         if n!=1:continue
         run=[(p,n)];last=1
         for p2,n2 in c[i+1:]:
-            if n2==last:continue
-            if n2==last+1:run.append((p2,n2));last=n2;continue
-            if n2<=last:continue
+            if n2==last+1:
+                run.append((p2,n2));last=n2;continue
             break
         if len(run)>=3:runs.append(run)
     r=max(runs,key=len,default=[]);return [(n,t[p:r[i+1][0] if i+1<len(r) else len(t)]) for i,(p,n) in enumerate(r)]
