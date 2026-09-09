@@ -1,0 +1,29 @@
+name: Inspect docx
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract docx function
+        run: |
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+          s=Path('app.py').read_text(encoding='utf-8')
+          tree=ast.parse(s)
+          node=next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='docx')
+          lines=s.splitlines()
+          Path('debug_docx.txt').write_text('\n'.join(lines[node.lineno-1:node.end_lineno])+'\n',encoding='utf-8')
+          PY
+      - name: Commit debug
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add debug_docx.txt
+          git diff --cached --quiet || git commit -m 'Temporary inspect docx function'
+          git push
