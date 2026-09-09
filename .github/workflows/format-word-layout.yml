@@ -12,11 +12,15 @@ jobs:
       - name: Fix question and option layout
         run: |
           python - <<'PY'
+          import ast
           from pathlib import Path
           p=Path('app.py')
           s=p.read_text(encoding='utf-8')
-          start=s.index('def docx(rs,bar,assets=None,subjects=None):')
-          end=s.index('\ndef ',start+4)
+          tree=ast.parse(s)
+          node=next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='docx')
+          lines=s.splitlines(keepends=True)
+          start=sum(len(x) for x in lines[:node.lineno-1])
+          end=sum(len(x) for x in lines[:node.end_lineno])
           new='''def docx(rs,bar,assets=None,subjects=None):
               assets=assets or {};d=Document();s=d.sections[0];s.top_margin=s.bottom_margin=Inches(.35);s.left_margin=s.right_margin=Inches(.3)
               p=d.add_paragraph();p.alignment=WD_ALIGN_PARAGRAPH.CENTER;run(p,'BILINGUAL QUESTION PAPER',False,True)
