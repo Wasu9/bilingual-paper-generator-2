@@ -4,9 +4,9 @@ import re
 p = Path('app.py')
 s = p.read_text()
 
-protect = r'''PROTECT=re.compile(r''' + "'''" + r'''\\(?:[A-Za-z]+(?:\{[^{}]*\})?)|\$[^$]+\$|\b(?:sin|cos|tan|cot|sec|cosec|log|ln|lim|exp|dx|dy|dt|dA|dB|dV|vec|frac)\b|\b(?:H2O|CO2|O2|N2|H2|NaCl|HCl|H2SO4|HNO3|NH3|CH4|C2H5OH|KMnO4|K2Cr2O7|NaOH|CaCO3|CaO|CH3MgBr|LiAlH4|NaBH4|ATP|DNA|RNA|mRNA|tRNA|eV|keV|MeV|GeV|Hz|kHz|MHz|GHz|Pa|kPa|MPa|mol|kg|mg|μg|cm|mm|nm|km|ms|μs)\b|\b[A-Za-zα-ωΑ-Ω]+(?:\^[-+]?\d+|[₀₁₂₃₄₅₆₇₈₉])+\b|\b[A-Za-zα-ωΑ-Ω0-9]+\s*[=≈≠≤≥<>±∝→←↔⇌]\s*[A-Za-zα-ωΑ-Ω0-9²³⁴⁵⁻⁺⁰¹²³⁴⁵⁶⁷⁸⁹./()+×÷√-]+(?:\s+[A-Za-zα-ωΑ-Ω0-9²³⁴⁵⁻⁺⁰¹²³⁴⁵⁶⁷⁸⁹./()+×÷√-]+)*|[∫∮∑√∞±×÷≈≠≤≥→←↔⇌∆∂∇θπλμΩαβγδφψω²³⁴⁵⁻⁺⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉]',re.I)''' + "'''"
+protect = r'''PROTECT=re.compile(r''' + "'''" + r'''\\(?:[A-Za-z]+(?:\{[^{}]*\})?)|\$[^$]+\$|\b(?:sin|cos|tan|cot|sec|cosec|log|ln|lim|exp|dx|dy|dt|dA|dB|dV|vec|frac)\b|\b(?:H2O|CO2|O2|N2|H2|NaCl|HCl|H2SO4|HNO3|NH3|CH4|C2H5OH|KMnO4|K2Cr2O7|NaOH|CaCO3|CaO|CH3MgBr|LiAlH4|NaBH4|ATP|DNA|mRNA|tRNA|eV|keV|MeV|GeV|Hz|kHz|MHz|GHz|Pa|kPa|MPa|mol|kg|mg|μg|cm|mm|nm|km|ms|μs)\b|\b[A-Za-zα-ωΑ-Ω]+(?:\^[-+]?\d+|[₀₁₂₃₄₅₆₇₈₉])+\b|\b[A-Za-zα-ωΑ-Ω0-9]+\s*[=≈≠≤≥<>±∝→←↔⇌]\s*[A-Za-zα-ωΑ-Ω0-9²³⁴⁵⁻⁺⁰¹²³⁴⁵⁶⁷⁸⁹./()+×÷√-]+(?:\s+[A-Za-zα-ωΑ-Ω0-9²³⁴⁵⁻⁺⁰¹²³⁴⁵⁶⁷⁸⁹./()+×÷√-]+)*|[∫∮∑√∞±×÷≈≠≤≥→←↔⇌∆∂∇θπλμΩαβγδφψω²³⁴⁵⁻⁺⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉]',re.I)''' + "'''"
 
-s, n = re.subn(r'^PROTECT=.*$', protect, s, count=1, flags=re.M)
+s, n = re.subn(r'^PROTECT=.*$', lambda _m: protect, s, count=1, flags=re.M)
 if n != 1:
     raise SystemExit('PROTECT definition not found')
 
