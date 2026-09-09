@@ -7,21 +7,44 @@ from docx.enum.table import WD_TABLE_ALIGNMENT,WD_CELL_VERTICAL_ALIGNMENT
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from deep_translator import GoogleTranslator
-st.set_page_config(page_title='PaperCraft AI',page_icon='🎓',layout='wide')
-st.markdown('''<style>.stApp{background:#f8fafc}.hero{padding:42px;border-radius:26px;background:linear-gradient(135deg,#0f172a,#1e3a8a);color:#fff;margin-bottom:22px}.hero h1{font-size:42px;margin:0}.hero span{color:#93c5fd}.card{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:20px}.stButton>button{background:#2563eb!important;color:white!important;border:0!important;border-radius:10px!important}.stDownloadButton>button{background:#047857!important;color:white!important;border:0!important;border-radius:10px!important}</style>''',unsafe_allow_html=True)
-st.markdown('<div class="hero"><h1>PaperCraft AI</h1><p>English PDF → clean English + Hindi Word. Options are always typed as <b>(1) (2) (3) (4)</b>; option screenshots are never inserted.</p></div>',unsafe_allow_html=True)
+
+st.set_page_config(page_title="PaperCraft AI — Bilingual Paper Generator",page_icon="🎓",layout="wide")
+
+st.markdown("""<style>
+.stApp{background:#f8fafc;color:#0f172a}.block-container{max-width:1180px;padding:1rem 2rem 4rem}
+.hero{border-radius:28px;padding:52px 48px;background:linear-gradient(135deg,#0f172a,#1e3a8a 60%,#312e81);color:white;box-shadow:0 20px 55px #0f172a22}
+.hero h1{font-size:46px;line-height:1.08;margin:0 0 14px}.hero h1 span{color:#93c5fd}.hero p{max-width:760px;line-height:1.65;color:#dbeafe}
+.feature{background:white;border:1px solid #e2e8f0;border-radius:16px;padding:20px;height:100%}.feature h3{margin:0 0 7px}.feature p{color:#64748b;font-size:13px;line-height:1.5}
+.upload{background:white;border:1px solid #dbe4f0;border-radius:22px;padding:28px;box-shadow:0 14px 40px #0f172a0b;margin-top:24px}
+.metric{background:#f8fafc;border:1px solid #e2e8f0;border-radius:13px;padding:13px;text-align:center}.metric small{display:block;color:#64748b;font-size:10px;font-weight:800;text-transform:uppercase}.metric b{font-size:22px}
+.stButton>button{border-radius:11px!important;height:46px!important;font-weight:700!important;background:linear-gradient(135deg,#2563eb,#4f46e5)!important;border:0!important}
+.stDownloadButton>button{border-radius:11px!important;height:46px!important;font-weight:700!important;background:#047857!important;color:white!important}
+</style>""",unsafe_allow_html=True)
+
+st.markdown('<div class="hero"><h1>Turn any question paper into a <span>professional bilingual paper.</span></h1><p>Upload an English PDF. PaperCraft AI detects real questions, removes headers/footers, preserves mathematics and chemistry notation, keeps diagrams, translates the prose into Hindi, and creates a two-column Word document.</p></div>',unsafe_allow_html=True)
+
+st.markdown("### Built for educators")
+a,b,c=st.columns(3)
+with a: st.markdown('<div class="feature"><h3>📄 Layout-aware extraction</h3><p>Uses PDF coordinates and sequential question runs instead of treating every numbered line as a question.</p></div>',unsafe_allow_html=True)
+with b: st.markdown('<div class="feature"><h3>🧠 Science-safe Hindi</h3><p>Protects formulas, units, chemical formulae, symbols and technical notation during translation.</p></div>',unsafe_allow_html=True)
+with c: st.markdown('<div class="feature"><h3>🖼️ Visual fidelity</h3><p>Uses original PDF crops for equations, answer choices and embedded figures when text extraction is unreliable.</p></div>',unsafe_allow_html=True)
+
 HEAD=('PHYSICS','CHEMISTRY','MATHEMATICS','BIOLOGY','I PUC','II PUC','JEE MAINS','NEET','QUESTION PAPER','TEST SERIES','ANSWER KEY')
 PAGE=re.compile(r'^(?:I|II)?\s*PUC.*(?:MAINS|NEET).*page\s*\d+$',re.I)
 SEC=re.compile(r'^\(?\s*(single correct|multiple correct|numerical value|assertion|paragraph|match)\b',re.I)
 PROTECT=re.compile(r'\\(?:[A-Za-z]+(?:\{[^{}]*\})?)|\$[^$]+\$|\b(?:sin|cos|tan|cot|sec|cosec|log|ln|lim|exp|dx|dy|dt|dA|dB|dV|vec|frac)\b|\b(?:H2O|CO2|O2|N2|H2|NaCl|HCl|H2SO4|HNO3|NH3|CH4|C2H5OH|KMnO4|K2Cr2O7|NaOH|CaCO3|CaO|CH3MgBr|LiAlH4|NaBH4|ATP|DNA|RNA)\b|[∫∮∑√∞±×÷≈≠≤≥→←↔⇌∆∂∇θπλμΩαβγδφψω]',re.I)
+
 @st.cache_data(show_spinner=False)
 def pages(data):
  p=fitz.open(stream=data,filetype='pdf');return [x.get_text('text') for x in p]
+
 def clean(x):return re.sub(r'\s+',' ',x.replace('\xa0',' ')).strip()
+
 def math(x):
  m={'𝑥':'x','𝑦':'y','𝑧':'z','𝑛':'n','𝑎':'a','𝑏':'b','𝑚':'m','𝑝':'p','𝑞':'q','𝑟':'r','𝑡':'t','𝑓':'f','𝑒':'e','𝑑':'d','𝑐':'c','𝛼':'α','𝛽':'β','𝛾':'γ','𝛿':'δ','𝜃':'θ','𝜋':'π','𝜆':'λ','𝜇':'μ','𝜔':'ω','𝛺':'Ω'}
  for a,b in m.items():x=x.replace(a,b)
  x=re.sub(r'\s+',' ',x).strip();x=re.sub(r'\s*([=+\-×÷≤≥≠<>])\s*',r' \1 ',x);return re.sub(r'\s+',' ',x).strip()
+
 def fmt(lines):
  a=[math(x) for x in lines if x.strip()];o=[];i=0
  while i<len(a):
@@ -34,6 +57,7 @@ def fmt(lines):
     o.append(f'({a[i]})/({c})');i+=2;continue
   o.append(a[i]);i+=1
  return ' '.join(o).strip()
+
 def blocks(ps):
  t='\n'.join(ps);ms=list(re.finditer(r'(?m)^\s*(\d{1,3})\s*\.\s*',t));c=[(m.start(),int(m.group(1))) for m in ms if int(m.group(1))<=500];r=[]
  for p,n in c:
@@ -44,6 +68,7 @@ def blocks(ps):
   if n<=q:continue
   r.append([(p,n)])
  r=max([x for x in r if len(x)>=3],key=len,default=[]);return [(n,t[p:r[i+1][0] if i+1<len(r) else len(t)]) for i,(p,n) in enumerate(r)]
+
 def parse(n,b):
  ls=[]
  for x in b.splitlines():
@@ -62,7 +87,9 @@ def parse(n,b):
   elif cur is None:stem.append(x)
   else:parts[cur].append(x)
  return {'num':n,'stem':fmt(stem),'options':[fmt(parts[k]) for k in (1,2,3,4)]}
+
 def records(ps):return [parse(n,b) for n,b in blocks(ps)]
+
 @st.cache_data(show_spinner=False)
 def tr(x):
  if not x:return x
@@ -72,6 +99,7 @@ def tr(x):
  except Exception:y=x
  for i,v in enumerate(a):y=y.replace(f'PCX{i}X',v)
  return y
+
 def run(p,t,h=False,b=False):
  p.paragraph_format.space_after=Pt(2)
  r=p.add_run(t)
@@ -79,6 +107,7 @@ def run(p,t,h=False,b=False):
  r.font.size=Pt(9.5)
  r.bold=b
  r._element.rPr.rFonts.set(qn('w:eastAsia'),'Nirmala UI' if h else 'Calibri')
+
 def docx(rs,bar):
  d=Document();s=d.sections[0];s.top_margin=s.bottom_margin=Inches(.35);s.left_margin=s.right_margin=Inches(.3);p=d.add_paragraph();p.alignment=WD_ALIGN_PARAGRAPH.CENTER;run(p,'BILINGUAL QUESTION PAPER',False,True)
  t=d.add_table(rows=1,cols=2);t.autofit=False;t.alignment=WD_TABLE_ALIGNMENT.CENTER
@@ -94,6 +123,7 @@ def docx(rs,bar):
     if o:run(c.add_paragraph(),f'({k}) '+(tr(o) if h else o),h)
   bar.progress((j+1)/len(rs))
  b=io.BytesIO();d.save(b);return b.getvalue()
+
 up=st.file_uploader('Upload English Question Paper (PDF)',type='pdf')
 if up:
  data=up.getvalue();rs=records(pages(data));a,b=st.columns(2);a.metric('Questions',len(rs));b.metric('Range',f'{rs[0]["num"]}–{rs[-1]["num"]}' if rs else '—')
