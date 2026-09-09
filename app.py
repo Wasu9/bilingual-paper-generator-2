@@ -1,18 +1,31 @@
-import io, re, hashlib
-import fitz
-import streamlit as st
-from docx import Document
-from docx.shared import Inches, Pt
-from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.enum.table import WD_TABLE_ALIGNMENT, WD_CELL_VERTICAL_ALIGNMENT
-from docx.oxml import OxmlElement
-from docx.oxml.ns import qn
-from deep_translator import GoogleTranslator
+st.set_page_config(page_title="PaperCraft AI — Bilingual Paper Generator", page_icon="🎓", layout="wide", initial_sidebar_state="collapsed")
 
-st.set_page_config(page_title='PaperCraft AI', page_icon='🎓', layout='wide')
-st.markdown('''<style>.stApp{background:linear-gradient(135deg,#f8fafc,#e2e8f0)}.hero{background:linear-gradient(135deg,#1e3a8a,#3b82f6);padding:28px;border-radius:20px;color:white;text-align:center;margin-bottom:22px}.hero h1{margin:0}.card{background:white;padding:20px;border-radius:16px;border:1px solid #e2e8f0;box-shadow:0 4px 20px #0000000d}</style>''', unsafe_allow_html=True)
-st.markdown('<div class="hero"><h1>🎓 PaperCraft AI</h1><div>English PDF → Professional Bilingual English + Hindi Word Paper</div></div>', unsafe_allow_html=True)
+st.markdown(r"""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+.stApp{background:#f8fafc;font-family:Inter,sans-serif;color:#0f172a}
+.block-container{max-width:1180px;padding:1.2rem 2rem 4rem}
+header[data-testid="stHeader"]{background:transparent}
+.nav{display:flex;align-items:center;justify-content:space-between;padding:10px 0 22px}.brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:20px;color:#0f172a}.brandmark{width:38px;height:38px;border-radius:11px;background:linear-gradient(135deg,#2563eb,#7c3aed);display:grid;place-items:center;color:white;font-size:19px;box-shadow:0 8px 22px #2563eb33}.navlinks{display:flex;gap:28px;color:#64748b;font-size:14px;font-weight:600}
+.hero-wrap{border-radius:30px;padding:68px 58px 60px;background:radial-gradient(circle at 85% 15%,#60a5fa55 0,transparent 28%),radial-gradient(circle at 10% 90%,#a78bfa44 0,transparent 30%),linear-gradient(135deg,#0f172a,#1e3a8a 58%,#312e81);color:#fff;box-shadow:0 24px 60px #0f172a20;overflow:hidden;position:relative}.hero-wrap:after{content:"";position:absolute;width:300px;height:300px;border:1px solid #ffffff18;border-radius:50%;right:-110px;bottom:-140px}.eyebrow{display:inline-block;background:#ffffff14;border:1px solid #ffffff22;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:700;letter-spacing:.3px;margin-bottom:20px}.hero-title{font-size:52px;line-height:1.05;letter-spacing:-2px;font-weight:800;max-width:780px;margin:0 0 18px}.hero-title span{color:#93c5fd}.hero-sub{font-size:17px;line-height:1.7;color:#dbeafe;max-width:700px;margin-bottom:28px}.hero-points{display:flex;gap:18px;flex-wrap:wrap;font-size:13px;color:#e0e7ff}.hero-points span{background:#ffffff0d;border:1px solid #ffffff18;padding:9px 12px;border-radius:10px}
+.section{padding:42px 0 8px;text-align:center}.kicker{color:#2563eb;font-size:12px;font-weight:800;letter-spacing:1.3px;text-transform:uppercase}.section h2{font-size:30px;letter-spacing:-.8px;margin:8px 0 10px;color:#0f172a}.section p{color:#64748b;max-width:650px;margin:0 auto 28px;line-height:1.6}.feature{background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:24px;text-align:left;height:100%;box-shadow:0 8px 28px #0f172a08}.feature-icon{width:42px;height:42px;border-radius:12px;background:#eff6ff;display:grid;place-items:center;font-size:20px;margin-bottom:15px}.feature h3{margin:0 0 8px;font-size:16px}.feature p{margin:0;color:#64748b;font-size:13px;line-height:1.55}.step{background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:22px;text-align:center;height:100%}.stepno{font-size:12px;font-weight:800;color:#2563eb;background:#eff6ff;border-radius:999px;padding:6px 10px;display:inline-block;margin-bottom:10px}.step h3{font-size:16px;margin:5px}.step p{font-size:13px;color:#64748b;margin:0;line-height:1.5}
+.upload-shell{background:#fff;border:1px solid #dbe4f0;border-radius:24px;padding:30px;box-shadow:0 16px 45px #0f172a0b;margin-top:20px}.upload-title{text-align:center;font-size:24px;font-weight:800;margin:0 0 7px}.upload-sub{text-align:center;color:#64748b;font-size:14px;margin-bottom:22px}.status-pill{display:inline-block;border-radius:999px;padding:7px 12px;background:#ecfdf5;color:#047857;font-size:12px;font-weight:700}.metric-card{background:#f8fafc;border:1px solid #e2e8f0;border-radius:14px;padding:15px;text-align:center}.metric-label{font-size:11px;color:#64748b;text-transform:uppercase;font-weight:700;letter-spacing:.7px}.metric-value{font-size:23px;font-weight:800;margin-top:3px}.footer{text-align:center;color:#94a3b8;font-size:12px;padding:42px 0 8px}.stButton>button{border-radius:12px!important;height:46px!important;font-weight:700!important;background:linear-gradient(135deg,#2563eb,#4f46e5)!important;border:0!important;box-shadow:0 8px 20px #4f46e533!important}.stDownloadButton>button{border-radius:12px!important;height:46px!important;font-weight:700!important;background:linear-gradient(135deg,#059669,#047857)!important;border:0!important;box-shadow:0 8px 20px #05966933!important;color:white!important}[data-testid="stFileUploader"]{background:#f8fafc;border:1.5px dashed #93c5fd;border-radius:18px;padding:18px}[data-testid="stFileUploaderDropzone"]{background:#fff;border-radius:14px}#MainMenu,footer{visibility:hidden}@media(max-width:800px){.hero-wrap{padding:42px 25px}.hero-title{font-size:37px}.navlinks{display:none}.block-container{padding:1rem}}
+</style>
+""", unsafe_allow_html=True)
 
+st.markdown("""<div class="nav"><div class="brand"><div class="brandmark">✦</div>PaperCraft AI</div><div class="navlinks"><span>Features</span><span>How it works</span><span>Bilingual Papers</span></div><div><span class="status-pill">● AI Paper Generator</span></div></div>""", unsafe_allow_html=True)
+st.markdown("""<div class="hero-wrap"><div class="eyebrow">SMARTER PAPER CREATION • ENGLISH → ENGLISH + HINDI</div><h1 class="hero-title">Turn any question paper into a <span>professional bilingual paper.</span></h1><div class="hero-sub">Upload your English PDF and PaperCraft AI extracts questions, protects scientific notation, translates the content into Hindi, and prepares a clean two-column Word document.</div><div class="hero-points"><span>✓ Question extraction</span><span>✓ Hindi translation</span><span>✓ Math & science protection</span><span>✓ Word-ready formatting</span></div></div>""", unsafe_allow_html=True)
+st.markdown('<div class="section"><div class="kicker">Built for educators</div><h2>Everything you need to create bilingual papers</h2><p>A clean workflow designed for coaching institutes, teachers and academic teams who need consistent English + Hindi question papers.</p></div>', unsafe_allow_html=True)
+f1,f2,f3=st.columns(3)
+with f1: st.markdown('<div class="feature"><div class="feature-icon">📄</div><h3>Smart PDF Extraction</h3><p>Detects numbered questions and cleans common headers, page numbers and repeated paper metadata.</p></div>',unsafe_allow_html=True)
+with f2: st.markdown('<div class="feature"><div class="feature-icon">🧠</div><h3>Science-Aware Translation</h3><p>Protects formulas, units, symbols and common scientific terms before Hindi translation.</p></div>',unsafe_allow_html=True)
+with f3: st.markdown('<div class="feature"><div class="feature-icon">📝</div><h3>Professional Word Output</h3><p>Generates a polished two-column English + Hindi layout ready for editing and printing.</p></div>',unsafe_allow_html=True)
+st.markdown('<div class="section"><div class="kicker">Simple workflow</div><h2>From PDF to paper in three steps</h2></div>', unsafe_allow_html=True)
+s1,s2,s3=st.columns(3)
+with s1: st.markdown('<div class="step"><div class="stepno">01</div><h3>Upload</h3><p>Choose your English question-paper PDF.</p></div>',unsafe_allow_html=True)
+with s2: st.markdown('<div class="step"><div class="stepno">02</div><h3>Generate</h3><p>Questions are extracted, translated and formatted.</p></div>',unsafe_allow_html=True)
+with s3: st.markdown('<div class="step"><div class="stepno">03</div><h3>Download</h3><p>Get the finished bilingual Word document.</p></div>',unsafe_allow_html=True)
+MATH_WORDS = r'(?i)\b(?:sin|cos|tan|cot|sec|cosec|log|ln|lim|exp|det|mod)\b'
 FORMULA_CHARS = set('∫∮∑√∞±×÷≈≠≤≥→←↔⇌∆∂∇θπλμΩαβγδφψω')
 CHEM = re.compile(r'\b(?:H2O|CO2|O2|N2|H2|NaCl|HCl|H2SO4|HNO3|NH3|CH4|C2H5OH|KMnO4|K2Cr2O7|NaOH|CaCO3|CaO|ATP|DNA|RNA)\b', re.I)
 
@@ -45,9 +58,10 @@ def parse_questions(pages):
     starts=[]
     pat=re.compile(r'^(?:Q(?:uestion)?\s*)?(\d{1,3})\s*[\.)\:]',re.I)
     for i,l in enumerate(lines):
-        if pat.match(l): starts.append(i)
-    if not starts: return []
+        m=pat.match(l)
+        if m: starts.append(i)
     qs=[]
+    if not starts: return []
     for n,st_i in enumerate(starts):
         en=starts[n+1] if n+1<len(starts) else len(lines)
         block='\n'.join(lines[st_i:en]).strip()
@@ -66,8 +80,10 @@ def protect(text):
 @st.cache_data(show_spinner=False)
 def translate_text(text):
     protected,saved=protect(text)
-    try: translated=GoogleTranslator(source='en',target='hi').translate(protected)
-    except Exception: translated=protected
+    try:
+        translated=GoogleTranslator(source='en',target='hi').translate(protected)
+    except Exception:
+        translated=protected
     for i,v in enumerate(saved): translated=translated.replace(f'__PAPERCRAFT_{i}__',v)
     return translated
 
@@ -125,24 +141,32 @@ def build_docx(data, qs, progress):
         result.append((q,hi)); progress.progress((idx+1)/max(1,len(qs)))
     bio=io.BytesIO(); doc.save(bio); bio.seek(0); return bio,result
 
-uploaded=st.file_uploader('📄 Upload English Question Paper (PDF)',type=['pdf'])
+st.markdown('<div class="upload-shell"><div class="upload-title">Create your bilingual question paper</div><div class="upload-sub">Upload your English PDF and generate a clean English + Hindi Word document.</div>', unsafe_allow_html=True)
+uploaded=st.file_uploader('Upload English Question Paper (PDF)',type=['pdf'],label_visibility='visible')
+st.markdown('</div>',unsafe_allow_html=True)
+
 if uploaded:
     data=uploaded.getvalue(); state=pdf_state(data)
     if st.session_state.get('pdf_state')!=state:
         st.session_state.clear(); st.session_state['pdf_state']=state
     pages=analyze_pdf(data); qs=parse_questions(pages)
-    c1,c2=st.columns(2)
-    with c1:
-        st.markdown('<div class="card">',unsafe_allow_html=True); st.metric('Pages',len(pages)); st.metric('Detected Questions',len(qs)); st.markdown('</div>',unsafe_allow_html=True)
-    with c2:
-        if not qs: st.error('No numbered questions detected. This PDF may be scanned/image-only; OCR support is required for this type.')
-        else: st.success('PDF structure detected. Ready to generate.')
-    if qs and st.button('🚀 Generate Bilingual Word File',use_container_width=True):
-        bar=st.progress(0); buf,result=build_docx(data,qs,bar); st.session_state['docx']=buf.getvalue(); st.session_state['result']=result
-    if 'docx' in st.session_state:
-        st.download_button('📥 Download Word Document',st.session_state['docx'],'Bilingual_Question_Paper.docx','application/vnd.openxmlformats-officedocument.wordprocessingml.document',use_container_width=True)
-        st.divider(); st.subheader('👀 Preview')
-        for en,hi in st.session_state['result'][:3]:
-            a,b=st.columns(2); a.info(en); b.success(hi)
+    m1,m2,m3=st.columns(3)
+    with m1: st.markdown(f'<div class="metric-card"><div class="metric-label">Pages</div><div class="metric-value">{len(pages)}</div></div>',unsafe_allow_html=True)
+    with m2: st.markdown(f'<div class="metric-card"><div class="metric-label">Detected questions</div><div class="metric-value">{len(qs)}</div></div>',unsafe_allow_html=True)
+    with m3: st.markdown('<div class="metric-card"><div class="metric-label">Output format</div><div class="metric-value">DOCX</div></div>',unsafe_allow_html=True)
+    st.write('')
+    if not qs:
+        st.error('No numbered questions detected. This PDF may be scanned/image-only and needs OCR support.')
+    else:
+        st.success(f'PDF ready — {len(qs)} questions detected.')
+        if st.button('🚀 Generate Bilingual Word File',use_container_width=True):
+            bar=st.progress(0); buf,result=build_docx(data,qs,bar); st.session_state['docx']=buf.getvalue(); st.session_state['result']=result
+        if 'docx' in st.session_state:
+            st.download_button('📥 Download Bilingual Word Document',st.session_state['docx'],'Bilingual_Question_Paper.docx','application/vnd.openxmlformats-officedocument.wordprocessingml.document',use_container_width=True)
+            st.markdown('<div class="section" style="padding-top:25px"><div class="kicker">Preview</div><h2>First questions</h2></div>',unsafe_allow_html=True)
+            for en,hi in st.session_state['result'][:3]:
+                a,b=st.columns(2); a.info(en); b.success(hi)
 else:
-    st.info('Upload a PDF to begin.')
+    st.markdown('<div style="text-align:center;color:#94a3b8;font-size:13px;margin-top:12px">PDF only • Best results with selectable text PDFs</div>',unsafe_allow_html=True)
+
+st.markdown('<div class="footer">PaperCraft AI • Bilingual Question Paper Generator • Built for fast, consistent academic document preparation</div>',unsafe_allow_html=True)
