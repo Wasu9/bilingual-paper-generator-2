@@ -7,4 +7,30 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: python -m py_compile app.py
+      - name: Apply patch
+        run: python tools/phase2_patch.py
+      - name: Compile
+        run: python -m py_compile app.py
+      - name: Regression tests
+        run: |
+          python - <<'PY'
+          import ast, pathlib, re
+          src=pathlib.Path('app.py').read_text(); tree=ast.parse(src)
+          wanted={'norm','clean','math','fmt'}
+          nodes=[n for n in tree.body if isinstance(n,(ast.FunctionDef,ast.Import,ast.ImportFrom)) and (not isinstance(n,ast.FunctionDef) or n.name in wanted)]
+          ns={'re':re}
+          exec(compile(ast.Module(body=nodes,type_ignores=[]),'app.py','exec'),ns)
+          p=ns['PROTECT']; m=ns['math']; f=ns['fmt']
+          cases=['The velocity is v = u + at.','The energy is E = mc² and momentum p = mv.','Calculate sin θ + cos θ.','Find H₂SO₄, CO₂, NaCl and NH₃.','For 10^-3 mol, calculate the value.','The wavelength is 500 nm and frequency is 6 × 10^14 Hz.','Use √2, π, ∫, ∑ and Ω.']
+          for x in cases: assert p.search(x), 'not protected: '+x; assert m(x).strip()==m(x)
+          assert m('E=mc²')=='E = mc²'
+          assert f(['10','2'])=='10/2'; assert f(['x','2'])=='x/2'
+          print('PASS Phase 2 notation tests')
+          PY
+      - name: Commit Phase 2
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.py
+          git diff --cached --quiet || git commit -m 'Improve math and science notation preservation'
+          git push
