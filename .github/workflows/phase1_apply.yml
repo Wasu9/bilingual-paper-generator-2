@@ -33,7 +33,8 @@ jobs:
                   lines.append(f'VERSION-01 I-PUC NEET Page {(start//8)+1} of 16'); pages.append('\n'.join(lines))
               rs=app.records(pages); nums=[q['num'] for q in rs]
               assert nums==list(range(1,expected+1)), (nums[:30],nums[-20:])
-              assert rs[153]['num']==154 and rs[153]['stem']=='During inspiration', rs[153]
+              if expected >= 154:
+                  assert rs[153]['num']==154 and rs[153]['stem']=='During inspiration', rs[153]
               assert all(q['stem'] for q in rs)
               print('PASS',expected)
           check(180); check(75)
