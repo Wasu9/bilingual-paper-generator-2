@@ -261,15 +261,28 @@ def docx(rs,bar,assets=None,subjects=None):
         cs=t.add_row().cells;qa=assets.get(q['num'],{})
         for c in cs:c.width=Inches(3.9);c.vertical_alignment=WD_CELL_VERTICAL_ALIGNMENT.TOP
         for i,h in enumerate((False,True)):
-            c=cs[i];run(c.paragraphs[0],f'{q["num"]}.',h,True)
-            if q['stem']:run(c.add_paragraph(),tr(q['stem']) if h else q['stem'],h)
+            c=cs[i]
+            qp=c.paragraphs[0]
+            run(qp,f'{q["num"]}. ',h,True)
+            if q['stem']:run(qp,tr(q['stem']) if h else q['stem'],h)
             if qa.get('figure'):add_picture_paragraph(c,qa['figure'])
+            opts=[]
             for k,o in enumerate(q['options'],1):
                 text=o
                 if not text and qa.get('options',{}).get(k):
                     raw=transcribe_visual(qa['options'][k]);text=raw if raw else '[Image-based option: text/structure could not be reliably transcribed]'
                     if not raw:missing_visuals.append(q['num'])
-                if text:run(c.add_paragraph(),f'({k}) '+(tr(text) if h else text),h)
+                if text:opts.append((k,text))
+            compact=bool(opts) and len(opts)>=3 and all(len(re.sub(r'\s+',' ',x).strip())<=45 for _,x in opts) and all(len(re.sub(r'\s+',' ',opts[i][1]).strip())+len(re.sub(r'\s+',' ',opts[i+1][1]).strip())<=82 for i in range(0,len(opts)-1,2))
+            if compact:
+                for z in range(0,len(opts),2):
+                    p2=c.add_paragraph();p2.paragraph_format.space_after=Pt(0)
+                    k,text=opts[z];run(p2,f'({k}) '+(tr(text) if h else text),h)
+                    if z+1<len(opts):
+                        k2,text2=opts[z+1];run(p2,'    ',h);run(p2,f'({k2}) '+(tr(text2) if h else text2),h)
+            else:
+                for k,text in opts:
+                    p2=c.add_paragraph();p2.paragraph_format.space_after=Pt(0);run(p2,f'({k}) '+(tr(text) if h else text),h)
         bar.progress((j+1)/len(rs))
     b=io.BytesIO();d.save(b);return b.getvalue(),sorted(set(missing_visuals))
 
