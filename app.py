@@ -55,6 +55,10 @@ def math(x):
 def fmt(lines):
     a=[math(x) for x in lines if x.strip()];o=[];i=0
     while i<len(a):
+        if i+2<len(a) and re.fullmatch(r'[\d.]+',a[i+1]) and re.fullmatch(r'[\d.]+',a[i+2]) and a[i].rstrip().endswith(','):
+            o.append(f'{a[i]} {a[i+1]}/{a[i+2]}');i+=3;continue
+        if i+1<len(a) and re.fullmatch(r'[\d.]+',a[i]) and re.fullmatch(r'[\d.]+(?:\s*[A-Za-z²³⁴⁵⁻−0-9]+)?',a[i+1]):
+            o.append(f'{a[i]}/{a[i+1]}');i+=2;continue
         if a[i] in ('∫','∮') and i+2<len(a) and a[i+1] in ('dx','dy','dt','dA','dV') and a[i+2].endswith('='):
             o.append(f'{a[i]} {a[i+1]}/({a[i+2][:-1].strip()}) =');i+=3;continue
         if i+1<len(a):
@@ -63,24 +67,36 @@ def fmt(lines):
             if re.fullmatch(r'[\d.,a-zA-Zα-ω+\-−=]+',c) and len(c)<15 and re.search(r'[\dA-Za-zα-ω}]',a[i]) and not a[i].endswith(('=',':')):
                 o.append(f'({a[i]})/({c})');i+=2;continue
         o.append(a[i]);i+=1
-    return ' '.join(o).strip()
+    s=' '.join(o).strip()
+    s=re.sub(r'\(([^()]{1,80})\)/\(([^()]{1,40})\)',r'\1/\2',s)
+    s=re.sub(r'\s*\(\s*(?:Page|page)\s*\d+\s*\)\s*',' ',s)
+    return re.sub(r'\s+',' ',s).strip()
 
 def blocks(ps):
-    t='\n'.join(ps);ms=list(re.finditer(r'(?m)^\s*(\d{1,3})\s*\.\s*',t));c=[(m.start(),int(m.group(1))) for m in ms if int(m.group(1))<=500];r=[]
-    for p,n in c:
-        if not r:r=[[(p,n)]];continue
-        q=r[-1][-1][1]
-        if n==q:continue
-        if n==q+1:r[-1].append((p,n));continue
-        if n<=q:continue
-        r.append([(p,n)])
-    r=max([x for x in r if len(x)>=3],key=len,default=[])
+    t='\n'.join(ps)
+    starts=[m.start() for m in re.finditer(r'(?mi)^\s*(?:PHYSICS|CHEMISTRY|MATHEMATICS|BIOLOGY)\s*$',t)]
+    if starts:t=t[starts[0]:]
+    ms=list(re.finditer(r'(?m)^\s*(\d{1,3})\s*\.\s*',t))
+    c=[(m.start(),int(m.group(1))) for m in ms if int(m.group(1))<=500]
+    runs=[]
+    for i,(p,n) in enumerate(c):
+        if n!=1:continue
+        run=[(p,n)];last=1
+        for p2,n2 in c[i+1:]:
+            if n2==last:continue
+            if n2==last+1:run.append((p2,n2));last=n2;continue
+            if n2<=last:continue
+            break
+        if len(run)>=3:runs.append(run)
+    r=max(runs,key=len,default=[])
     return [(n,t[p:r[i+1][0] if i+1<len(r) else len(t)]) for i,(p,n) in enumerate(r)]
 
 def parse(n,b):
     ls=[]
     for x in b.splitlines():
         x=clean(x)
+        x=re.sub(r'\s*\(?/?\s*Page\s*\d+\s*\)?\s*',' ',x,flags=re.I)
+        x=re.sub(r'\s*\(?/?\s*correct\.\s*\)?\s*$','',x,flags=re.I)
         if not x or PAGE.fullmatch(x) or re.fullmatch(r'(?:I|II)\s*PUC\s*(?:\(JEE\)\s*)?MAINS(?:\s*Page\s*\d+)?',x,re.I) or x.upper() in HEAD or SEC.match(x) or x.lower().startswith(('this section contains','marking scheme:')):continue
         ls.append(x)
     if ls and re.match(rf'^{n}\.',ls[0]):ls[0]=re.sub(rf'^{n}\.\s*','',ls[0],1)
@@ -88,6 +104,9 @@ def parse(n,b):
     for x in ls:
         ms=list(re.finditer(r'\((1|2|3|4)\)',x))
         if ms:
+            prefix=x[:ms[0].start()].strip()
+            if prefix:
+                (parts[cur] if cur is not None else stem).append(prefix)
             for j,m in enumerate(ms):
                 k=int(m.group(1));v=x[m.end():ms[j+1].start() if j+1<len(ms) else len(x)].strip()
                 if v:parts[k].append(v)
