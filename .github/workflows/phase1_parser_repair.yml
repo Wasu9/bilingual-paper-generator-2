@@ -1,0 +1,144 @@
+name: Phase 1 Parser Repair
+
+on:
+  push:
+    paths:
+      - '.github/workflows/phase1_parser_repair.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  repair-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Patch Phase 1 parser
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('app.py')
+          s=p.read_text()
+          old="PAGE=re.compile(r'^(?:I|II)?\\s*PUC.*(?:MAINS|NEET).*page\\s*\\d+$',re.I)"
+          new="""PAGE=re.compile(r'^(?:VERSION\\s*[- ]?\\s*\\d+\\s+)?I\\s*[- ]*PUC.*?Page\\s*\\d+\\s+of\\s+\\d+$',re.I)
+          QUESTION_START=re.compile(r'^\\s*(\\d{1,3})(?:\\.(?!\\d)\\s*|\\s+(?=(?:What|Which|When|Where|Who|Why|How|A|An|The|If|During|Identify|Choose|Select|Calculate|Find|Determine|Consider|Given|For|In|On|According|Assertion|Reason|Match|Name|Our|Cells|Cell|Gas|Resistance|Eukaryotic|Mechanisms|Movement|Additional|Tidal|Normal|Inspiratory|Total|Prophase|Chromosomes|Meiosis|Does|Is|Are|Can|Let)\\b))',re.I)
+          PAGE_INLINE=re.compile(r'(?i)\\bPage\\s*\\d+\\s+of\\s+\\d+\\b|\\bVERSION\\s*[- ]?\\s*\\d+\\s*[/\\-]?\\s*I\\s*[- ]*PUC\\s*(?:[- ]*(?:NEET|JEE\\s*MAINS))?\\s*(?:[/\\-]?\\s*of\\s*\\d+)?')"""
+          if old not in s:
+              raise SystemExit('Expected PAGE definition not found; refusing unsafe patch')
+          s=s.replace(old,new,1)
+
+          start=s.index('def blocks(ps):')
+          end=s.index('def parse(n,b):',start)
+          new_blocks='''def _question_candidates(text):
+              return [(m.start(),int(m.group(1))) for m in QUESTION_START.finditer(text) if 1 <= int(m.group(1)) <= 500]
+
+          def blocks(ps):
+              t='\\n'.join(ps)
+              candidates=_question_candidates(t)
+              runs=[]
+              for i,(pos,num) in enumerate(candidates):
+                  if num != 1:
+                      continue
+                  run=[(pos,num)]; last=num
+                  for pos2,num2 in candidates[i+1:]:
+                      if num2 == last + 1:
+                          run.append((pos2,num2)); last=num2; continue
+                      # Small numeric labels can occur inside a real question,
+                      # but a genuine next-question gap must never be skipped.
+                      if last >= 10 and 1 <= num2 <= 4:
+                          continue
+                      break
+                  if len(run) >= 3:
+                      first_end=run[1][0] if len(run)>1 else len(t)
+                      first_block=t[pos:first_end]
+                      option_count=len(re.findall(r'\\((?:1|2|3|4)\\)',first_block))
+                      question_words=len(re.findall(r'\\b(?:what|which|when|where|who|why|how|find|calculate|given|consider|identify|determine|select|choose|the|during|assertion|reason)\\b',first_block,re.I))
+                      score=(len(run),option_count,question_words,len(first_block))
+                      runs.append((score,run))
+              if not runs:
+                  return []
+              # Longest contiguous sequence wins, so instruction numbering such
+              # as 1–15 cannot beat the real 1–180 question sequence.
+              best=max(runs,key=lambda z:z[0])[1]
+              return [(num,t[pos:best[i+1][0] if i+1<len(best) else len(t)]) for i,(pos,num) in enumerate(best)]
+
+          '''
+          s=s[:start]+new_blocks+s[end:]
+
+          start=s.index('def parse(n,b):')
+          end=s.index('def records(ps):',start)
+          new_parse='''def parse(n,b):
+              ls=[]
+              for x in b.splitlines():
+                  x=norm(x)
+                  x=PAGE_INLINE.sub(' ',x)
+                  x=re.sub(r'\\s*/\\s*$', '', x)
+                  x=re.sub(r'\\s*\\(?/?\\s*correct\\.\\s*\\)?\\s*$', '', x, flags=re.I)
+                  x=norm(x)
+                  if not x or PAGE.fullmatch(x) or x.upper() in HEAD or SEC.match(x) or x.lower().startswith(('this section contains','marking scheme:')):
+                      continue
+                  ls.append(x)
+              if ls:
+                  qprefix=re.compile(rf'^\\s*{n}(?:\\.(?!\\d)\\s*|\\s+(?=[A-Z]))',re.I)
+                  ls[0]=qprefix.sub('',ls[0],1).strip()
+              parts={1:[],2:[],3:[],4:[]}; stem=[]; cur=None
+              for x in ls:
+                  markers=list(re.finditer(r'\\((1|2|3|4)\\)',x))
+                  if markers:
+                      prefix=x[:markers[0].start()].strip()
+                      if prefix:
+                          (parts[cur] if cur is not None else stem).append(prefix)
+                      for j,m in enumerate(markers):
+                          k=int(m.group(1)); v=x[m.end():markers[j+1].start() if j+1<len(markers) else len(x)].strip()
+                          if v: parts[k].append(v)
+                          cur=k
+                  elif cur is None:
+                      stem.append(x)
+                  else:
+                      parts[cur].append(x)
+              return {'num':n,'stem':fmt(stem),'options':[fmt(parts[k]) for k in (1,2,3,4)]}
+
+          '''
+          s=s[:start]+new_parse+s[end:]
+          p.write_text(s)
+          PY
+
+      - name: Compile app
+        run: python -m py_compile app.py
+
+      - name: Install dependencies
+        run: pip install -q -r requirements.txt
+
+      - name: Regression test real PDFs
+        run: |
+          python - <<'PY'
+          import fitz, re, ast, pathlib
+          src=pathlib.Path('app.py').read_text()
+          tree=ast.parse(src)
+          wanted={'norm','clean','blocks','parse','records','fmt','math'}
+          nodes=[]
+          for n in tree.body:
+              if isinstance(n,(ast.FunctionDef,ast.Import,ast.ImportFrom)) and (not isinstance(n,ast.FunctionDef) or n.name in wanted):
+                  nodes.append(n)
+          ns={'re':re}
+          exec(compile(ast.Module(body=nodes,type_ignores=[]),'app.py','exec'),ns)
+          cases=[('07-09-2026  I-PUC NEET Q.P V-1.pdf',180),('07-09-26 II PUC JEE MAINS BRANCH.pdf',75)]
+          for fn,expected in cases:
+              ps=[p.get_text('text') for p in fitz.open(fn)]
+              rs=ns['records'](ps)
+              nums=[q['num'] for q in rs]
+              assert len(rs)==expected, (fn,'count',len(rs),nums[-10:])
+              assert nums==list(range(1,expected+1)), (fn,'sequence',nums[:10],nums[-10:])
+              assert all(q['stem'] for q in rs), (fn,'empty stem',[q['num'] for q in rs if not q['stem']][:10])
+              print(fn,'PASS',len(rs),'questions',nums[0],nums[-1])
+          PY
+
+      - name: Commit Phase 1 repair
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.py
+          git diff --cached --quiet || git commit -m 'Fix phase 1 question extraction'
+          git push
