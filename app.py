@@ -72,8 +72,13 @@ def tr(x):
  except Exception:y=x
  for i,v in enumerate(a):y=y.replace(f'PCX{i}X',v)
  return y
-def run(p,t,h=False):
- p.paragraph_format.space_after=Pt(2);r=p.add_run(t);r.font.name='Nirmala UI' if h else 'Calibri';r.font.size=Pt(9.5);r._element.rPr.rFonts.set(qn('w:eastAsia'),'Nirmala UI' if h else 'Calibri')
+def run(p,t,h=False,b=False):
+ p.paragraph_format.space_after=Pt(2)
+ r=p.add_run(t)
+ r.font.name='Nirmala UI' if h else 'Calibri'
+ r.font.size=Pt(9.5)
+ r.bold=b
+ r._element.rPr.rFonts.set(qn('w:eastAsia'),'Nirmala UI' if h else 'Calibri')
 def docx(rs,bar):
  d=Document();s=d.sections[0];s.top_margin=s.bottom_margin=Inches(.35);s.left_margin=s.right_margin=Inches(.3);p=d.add_paragraph();p.alignment=WD_ALIGN_PARAGRAPH.CENTER;run(p,'BILINGUAL QUESTION PAPER',False,True)
  t=d.add_table(rows=1,cols=2);t.autofit=False;t.alignment=WD_TABLE_ALIGNMENT.CENTER
