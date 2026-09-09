@@ -1,0 +1,67 @@
+name: Format Word layout
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fix question and option layout
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('app.py')
+          s=p.read_text(encoding='utf-8')
+          start=s.index('def docx(rs,bar,assets=None,subjects=None):')
+          end=s.index('\ndef ',start+4)
+          new='''def docx(rs,bar,assets=None,subjects=None):
+              assets=assets or {};d=Document();s=d.sections[0];s.top_margin=s.bottom_margin=Inches(.35);s.left_margin=s.right_margin=Inches(.3)
+              p=d.add_paragraph();p.alignment=WD_ALIGN_PARAGRAPH.CENTER;run(p,'BILINGUAL QUESTION PAPER',False,True)
+              t=d.add_table(rows=1,cols=2);t.autofit=False;t.alignment=WD_TABLE_ALIGNMENT.CENTER
+              for i,h in enumerate(('English','हिन्दी अनुवाद')):
+                  c=t.rows[0].cells[i];c.width=Inches(3.9);c.vertical_alignment=WD_CELL_VERTICAL_ALIGNMENT.CENTER;run(c.paragraphs[0],h,i==1,True)
+              missing_visuals=[];last_subject=None
+              for j,q in enumerate(rs):
+                  subj=subject_for(q['num'],subjects or [])
+                  if subj and subj!=last_subject:
+                      row=t.add_row();cell=row.cells[0].merge(row.cells[1]);run(cell.paragraphs[0],subj,False,True);last_subject=subj
+                  cs=t.add_row().cells;qa=assets.get(q['num'],{})
+                  for c in cs:c.width=Inches(3.9);c.vertical_alignment=WD_CELL_VERTICAL_ALIGNMENT.TOP
+                  for i,h in enumerate((False,True)):
+                      c=cs[i]
+                      qp=c.paragraphs[0]
+                      run(qp,f'{q["num"]}. ',h,True)
+                      if q['stem']:run(qp,tr(q['stem']) if h else q['stem'],h)
+                      if qa.get('figure'):add_picture_paragraph(c,qa['figure'])
+                      opts=[]
+                      for k,o in enumerate(q['options'],1):
+                          text=o
+                          if not text and qa.get('options',{}).get(k):
+                              raw=transcribe_visual(qa['options'][k]);text=raw if raw else '[Image-based option: text/structure could not be reliably transcribed]'
+                              if not raw:missing_visuals.append(q['num'])
+                          if text:opts.append((k,text))
+                      compact=bool(opts) and len(opts)>=3 and all(len(re.sub(r'\\s+',' ',x).strip())<=45 for _,x in opts) and all(len(re.sub(r'\\s+',' ',opts[i][1]).strip())+len(re.sub(r'\\s+',' ',opts[i+1][1]).strip())<=82 for i in range(0,len(opts)-1,2))
+                      if compact:
+                          for z in range(0,len(opts),2):
+                              p2=c.add_paragraph();p2.paragraph_format.space_after=Pt(0)
+                              k,text=opts[z];run(p2,f'({k}) '+(tr(text) if h else text),h)
+                              if z+1<len(opts):
+                                  k2,text2=opts[z+1];run(p2,'    ',h);run(p2,f'({k2}) '+(tr(text2) if h else text2),h)
+                      else:
+                          for k,text in opts:
+                              p2=c.add_paragraph();p2.paragraph_format.space_after=Pt(0);run(p2,f'({k}) '+(tr(text) if h else text),h)
+                  bar.progress((j+1)/len(rs))
+              b=io.BytesIO();d.save(b);return b.getvalue(),sorted(set(missing_visuals))
+          '''
+          p.write_text(s[:start]+new+s[end:],encoding='utf-8')
+          PY
+      - name: Commit format fix
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.py
+          git diff --cached --quiet || git commit -m 'Improve question and option Word layout'
+          git push
