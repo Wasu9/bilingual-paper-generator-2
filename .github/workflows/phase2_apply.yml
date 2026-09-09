@@ -1,0 +1,102 @@
+name: Phase 2 Apply
+on:
+  push:
+    paths:
+      - '.github/workflows/phase2_apply.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply math and science protection
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('app.py'); s=p.read_text()
+
+          old="PROTECT=re.compile(r'\\\\(?:[A-Za-z]+(?:\\{[^{}]*\\})?)|\\$[^$]+\\$|\\b(?:sin|cos|tan|cot|sec|cosec|log|ln|lim|exp|dx|dy|dt|dA|dB|dV|vec|frac)\\b|\\b(?:H2O|CO2|O2|N2|H2|NaCl|HCl|H2SO4|HNO3|NH3|CH4|C2H5OH|KMnO4|K2Cr2O7|NaOH|CaCO3|CaO|CH3MgBr|LiAlH4|NaBH4|ATP|DNA|RNA)\\b|[∫∮∑√∞±×÷≈≠≤≥→←↔⇌∆∂∇θπλμΩαβγδφψω]',re.I)"
+          new="""PROTECT=re.compile(r'''\\\\(?:[A-Za-z]+(?:\\{[^{}]*\\})?)|\\$[^$]+\\$|\\b(?:sin|cos|tan|cot|sec|cosec|log|ln|lim|exp|dx|dy|dt|dA|dB|dV|vec|frac|sin\\s*\\([^)]*\\)|cos\\s*\\([^)]*\\)|tan\\s*\\([^)]*\\))\\b|\\b(?:H2O|CO2|O2|N2|H2|NaCl|HCl|H2SO4|HNO3|NH3|CH4|C2H5OH|KMnO4|K2Cr2O7|NaOH|CaCO3|CaO|CH3MgBr|LiAlH4|NaBH4|ATP|DNA|RNA|RNA|mRNA|tRNA|eV|keV|MeV|GeV|Hz|kHz|MHz|GHz|Pa|kPa|MPa|N|J|W|V|A|C|F|H|K|mol|cd|lm|lx|kg|g|mg|μg|m|cm|mm|nm|km|s|ms|μs)\\b|\\b(?:[A-Za-zα-ωΑ-Ω]+(?:\\^[-+]?\\d+|[₀₁₂₃₄₅₆₇₈₉])+(?:[A-Za-zα-ωΑ-Ω]+)?)\\b|\\b(?:[A-Za-zα-ωΑ-Ω0-9]+\\s*[=≈≠≤≥<>±∝→←↔⇌]\\s*[A-Za-zα-ωΑ-Ω0-9²³⁴⁵⁻⁺⁰¹²³⁴⁵⁶⁷⁸⁹./()+×÷√-]+(?:\\s*[A-Za-zα-ωΑ-Ω0-9²³⁴⁵⁻⁺⁰¹²³⁴⁵⁶⁷⁸⁹./()+×÷√-]+)*)|[∫∮∑√∞±×÷≈≠≤≥→←↔⇌∆∂∇θπλμΩαβγδφψω²³⁴⁵⁻⁺⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉]',re.I)"""
+          if old not in s: raise SystemExit('PROTECT anchor not found')
+          s=s.replace(old,new,1)
+
+          old_math='''def math(x):
+    m={'𝑥':'x','𝑦':'y','𝑧':'z','𝑛':'n','𝑎':'a','𝑏':'b','𝑚':'m','𝑝':'p','𝑞':'q','𝑟':'r','𝑡':'t','𝑓':'f','𝑒':'e','𝑑':'d','𝑐':'c','𝛼':'α','𝛽':'β','𝛾':'γ','𝛿':'δ','𝜃':'θ','𝜋':'π','𝜆':'λ','𝜇':'μ','𝜔':'ω','𝛺':'Ω'}
+    for a,b in m.items(): x=x.replace(a,b)
+    x=re.sub(r'\\s+',' ',x).strip();x=re.sub(r'\\s*([=+\\-×÷≤≥≠<>])\\s*',r' \\1 ',x)
+    return re.sub(r'\\s+',' ',x).strip()
+'''
+          new_math='''def math(x):
+    m={'𝑥':'x','𝑦':'y','𝑧':'z','𝑛':'n','𝑎':'a','𝑏':'b','𝑚':'m','𝑝':'p','𝑞':'q','𝑟':'r','𝑡':'t','𝑓':'f','𝑒':'e','𝑑':'d','𝑐':'c','𝛼':'α','𝛽':'β','𝛾':'γ','𝛿':'δ','𝜃':'θ','𝜋':'π','𝜆':'λ','𝜇':'μ','𝜔':'ω','𝛺':'Ω'}
+    for a,b in m.items(): x=x.replace(a,b)
+    x=x.replace('∗','×').replace('·','·').replace('−','-').replace('–','-').replace('—','-')
+    x=re.sub(r'(?<=\\d)\\s*[×·]\\s*(?=10\\b)', ' × ', x)
+    x=re.sub(r'\\s+',' ',x).strip();x=re.sub(r'\\s*([=+\\-×÷≤≥≠<>∝→←↔])\\s*',r' \\1 ',x)
+    return re.sub(r'\\s+',' ',x).strip()
+'''
+          if old_math not in s: raise SystemExit('math anchor not found')
+          s=s.replace(old_math,new_math,1)
+
+          start=s.index('def run(p,t,h=False,b=False):')
+          end=s.index('def subject_map(data):',start)
+          new_run='''def _add_typed_run(p,text,h=False,b=False):
+    # Preserve common scientific superscripts/subscripts in editable Word text.
+    sub='₀₁₂₃₄₅₆₇₈₉'; sup='⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁽⁾'
+    pattern=re.compile(r'(\\^[+-]?\\d+|[₀₁₂₃₄₅₆₇₈₉]+|[⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁽⁾]+)')
+    pos=0
+    for m in pattern.finditer(text):
+        if m.start()>pos:
+            r=p.add_run(text[pos:m.start()]);r.font.name='Nirmala UI' if h else 'Calibri';r.font.size=Pt(9.5);r.bold=b;r._element.rPr.rFonts.set(qn('w:eastAsia'),'Nirmala UI' if h else 'Calibri')
+        token=m.group(0);r=p.add_run(token[1:] if token.startswith('^') else token);r.font.name='Nirmala UI' if h else 'Calibri';r.font.size=Pt(9.5);r.bold=b;r._element.rPr.rFonts.set(qn('w:eastAsia'),'Nirmala UI' if h else 'Calibri')
+        if token.startswith('^') or all(c in sup for c in token): r.font.superscript=True
+        else: r.font.subscript=True
+        pos=m.end()
+    if pos<len(text):
+        r=p.add_run(text[pos:]);r.font.name='Nirmala UI' if h else 'Calibri';r.font.size=Pt(9.5);r.bold=b;r._element.rPr.rFonts.set(qn('w:eastAsia'),'Nirmala UI' if h else 'Calibri')
+
+def run(p,t,h=False,b=False):
+    p.paragraph_format.space_after=Pt(2)
+    _add_typed_run(p,t,h,b)
+
+'''
+          s=s[:start]+new_run+s[end:]
+          p.write_text(s)
+          PY
+      - name: Compile
+        run: python -m py_compile app.py
+      - name: Phase 2 regression tests
+        run: |
+          python - <<'PY'
+          import ast, pathlib, re
+          src=pathlib.Path('app.py').read_text(); tree=ast.parse(src)
+          wanted={'norm','clean','math','fmt','tr'}
+          nodes=[n for n in tree.body if isinstance(n,(ast.FunctionDef,ast.Import,ast.ImportFrom)) and (not isinstance(n,ast.FunctionDef) or n.name in wanted)]
+          ns={'re':re}
+          exec(compile(ast.Module(body=nodes,type_ignores=[]),'app.py','exec'),ns)
+          protect=ns['PROTECT']; f=ns['fmt']; m=ns['math']
+          samples=[
+            'The velocity is v = u + at.',
+            'The energy is E = mc² and momentum p = mv.',
+            'Calculate sin θ + cos θ.',
+            'Find the concentration of H₂SO₄ and CO₂.',
+            'For 10^-3 mol of NaCl, calculate the value.',
+            'The wavelength is 500 nm and frequency is 6 × 10^14 Hz.',
+            'Use √2, π, ∫, ∑ and Ω in the calculation.'
+          ]
+          for x in samples:
+              assert protect.search(x), x
+              y=m(x); assert y and y.strip()==y, y
+          assert f(['10','2'])=='10/2'
+          assert f(['x','2'])=='x/2'
+          assert m('E=mc²')=='E = mc²'
+          print('PASS: Phase 2 protection/normalization cases')
+          PY
+      - name: Commit Phase 2
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.py
+          git diff --cached --quiet || git commit -m 'Improve math and science notation preservation'
+          git push
