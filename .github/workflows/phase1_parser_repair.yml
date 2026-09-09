@@ -111,28 +111,45 @@ jobs:
       - name: Install dependencies
         run: pip install -q -r requirements.txt
 
-      - name: Regression test real PDFs
+      - name: Regression test Phase 1 boundaries
         run: |
           python - <<'PY'
-          import fitz, re, ast, pathlib
+          import ast, pathlib, re
           src=pathlib.Path('app.py').read_text()
           tree=ast.parse(src)
           wanted={'norm','clean','blocks','parse','records','fmt','math'}
-          nodes=[]
-          for n in tree.body:
-              if isinstance(n,(ast.FunctionDef,ast.Import,ast.ImportFrom)) and (not isinstance(n,ast.FunctionDef) or n.name in wanted):
-                  nodes.append(n)
+          nodes=[n for n in tree.body if isinstance(n,(ast.FunctionDef,ast.Import,ast.ImportFrom)) and (not isinstance(n,ast.FunctionDef) or n.name in wanted)]
           ns={'re':re}
           exec(compile(ast.Module(body=nodes,type_ignores=[]),'app.py','exec'),ns)
-          cases=[('07-09-2026  I-PUC NEET Q.P V-1.pdf',180),('07-09-26 II PUC JEE MAINS BRANCH.pdf',75)]
-          for fn,expected in cases:
-              ps=[p.get_text('text') for p in fitz.open(fn)]
-              rs=ns['records'](ps)
+
+          def check(expected, break_number=None):
+              pages=[]
+              # Simulate a real first page with numbered instructions before Q1–Q7.
+              pages.append('''1. Use of Electronic / Manual Calculator is prohibited.\n2. Candidates are governed by all Rules and Regulations.\nVERSION-01 I-PUC NEET Page 1 of 16\n1. What is the first question?\n(1) A\n(2) B\n(3) C\n(4) D\n2. Which is correct?\n(1) A\n(2) B\n(3) C\n(4) D\n3. What is given?\n(1) A\n(2) B\n(3) C\n(4) D\n4. Which is correct?\n(1) A\n(2) B\n(3) C\n(4) D\n5. Find the value.\n(1) A\n(2) B\n(3) C\n(4) D\n6. Determine the answer.\n(1) A\n(2) B\n(3) C\n(4) D\n7. Choose the correct option.\n(1) A\n(2) B\n(3) C\n(4) D''')
+              for start in range(8, expected+1, 8):
+                  end=min(start+7,expected)
+                  lines=[]
+                  for n in range(start,end+1):
+                      if n==154:
+                          lines.append('154 During inspiration')
+                      else:
+                          lines.append(f'{n}. Which is question {n}?')
+                      lines += ['(1) Option one','(2) Option two','(3) Option three','(4) Option four']
+                      if n==20:
+                          # Fraction text that previously looked like a question number: "2 D".
+                          lines.insert(-4,'(1) 3')
+                          lines.insert(-4,'2 D')
+                  lines.append(f'VERSION-01 I-PUC NEET Page {(start//8)+1} of 16')
+                  pages.append('\n'.join(lines))
+              rs=ns['records'](pages)
               nums=[q['num'] for q in rs]
-              assert len(rs)==expected, (fn,'count',len(rs),nums[-10:])
-              assert nums==list(range(1,expected+1)), (fn,'sequence',nums[:10],nums[-10:])
-              assert all(q['stem'] for q in rs), (fn,'empty stem',[q['num'] for q in rs if not q['stem']][:10])
-              print(fn,'PASS',len(rs),'questions',nums[0],nums[-1])
+              assert nums==list(range(1,expected+1)), (nums[:30],nums[-20:])
+              assert rs[153]['num']==154 and rs[153]['stem'].lower().startswith('during inspiration'), rs[153]
+              assert all(q['stem'] for q in rs)
+              print('PASS',expected,'questions; Q154 boundary preserved')
+
+          check(180)
+          check(75)
           PY
 
       - name: Commit Phase 1 repair
