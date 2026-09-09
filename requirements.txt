@@ -3,3 +3,6 @@ pdfplumber
 PyMuPDF
 python-docx
 deep-translator
+pytesseract
+Pillow
+requests
