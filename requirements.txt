@@ -1,6 +1,6 @@
-streamlit
+streamlit==1.63.0
 pdfplumber
-PyMuPDF
+PyMuPDF==1.28.2
 python-docx
 deep-translator
 pytesseract
