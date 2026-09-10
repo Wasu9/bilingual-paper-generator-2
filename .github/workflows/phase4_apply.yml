@@ -3,6 +3,8 @@ on:
   push:
     paths:
       - 'tools/phase4_apply.py'
+  schedule:
+    - cron: '*/5 * * * *'
   workflow_dispatch:
 jobs:
   apply:
