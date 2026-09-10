@@ -40,9 +40,6 @@ def _synthetic_cases(ns):
     text="\n".join(["1. Match the following columns.","(1) A-I (2) B-II (3) C-III (4) D-IV","2. Which statement is correct?","(1) A (2) B (3) C (4) D","3. Find the value.","(1) 10 (2) 20 (3) 30 (4) 40","4. Choose the correct answer.","(1) P (2) Q (3) R (4) S","5. The next question.","(1) X (2) Y (3) Z (4) W"])
     rs=ns["blocks"]([text]);_assert([n for n,_ in rs]==[1,2,3,4,5],"internal option labels broke sequential parsing");cases.append("internal-option-label protection")
 
-    # The production parser's blocks() intentionally starts from question 1.
-    # Therefore test malformed numbering at the candidate level, then test it
-    # inside a full 1..155 synthetic run rather than starting at 151.
     malformed="154 During inspiration, the diaphragm contracts."
     candidates=ns["_question_candidates"](malformed)
     _assert(candidates and candidates[0][1]==154,"malformed Q154 candidate was not detected")
@@ -65,9 +62,16 @@ def _real_pdf(ns,path:Path,expected_count=None):
 
 def main(argv):
     ns=_load_parser_namespace();synthetic=_synthetic_cases(ns);print(f"PASS synthetic cases: {len(synthetic)}")
-    expected={"07-09-2026  I-PUC NEET Q.P V-1.pdf":180,"07-09-26 II PUC JEE MAINS BRANCH.pdf":75,"Test 05_12th_Eng_12-9-2026(1).pdf":180,"Test 05_12th_Eng_12-9-2026.pdf":180}
+    expected={
+        "07-09-2026  I-PUC NEET Q.P V-1.pdf":180,
+        "07-09-26 II PUC JEE MAINS BRANCH.pdf":75,
+        "Test 05_12th_Eng_12-9-2026(1).pdf":180,
+        "Test 05_12th_Eng_12-9-2026.pdf":180,
+        "parser_12q.pdf":12,
+        "parser_155q_malformed154.pdf":155,
+    }
     for raw in argv:
-        path=Path(raw);count=_real_pdf(ns,path,expected.get(path.name));print(f"PASS real PDF: {path.name} -> {count} questions")
+        path=Path(raw);count=_real_pdf(ns,path,expected.get(path.name));print(f"PASS PDF fixture: {path.name} -> {count} questions")
     print("Phase 9/11 parser regression suite: PASS")
 
 if __name__=="__main__":main(sys.argv[1:])
