@@ -32,4 +32,4 @@ jobs:
         run: python tests/regression_suite.py
 
       - name: Run final QA regression suite
-        run: python tests/final_qa_suite.py
+        run: PYTHONPATH=. python tests/final_qa_suite.py
