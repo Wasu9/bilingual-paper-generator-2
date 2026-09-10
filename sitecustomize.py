@@ -50,17 +50,20 @@ def _fixed_table(table, section):
     layout.set(qn('w:type'), 'fixed')
     table.autofit = False
 
-    available = section.page_width - section.left_margin - section.right_margin - section.gutter
-    half_twips = max(1, int(available / 2))
+    # python-docx Length values are EMU; OOXML table width is twips.
+    available_emu = int(section.page_width - section.left_margin - section.right_margin - section.gutter)
+    available_twips = max(1, int(round(available_emu / 635.0)))
+    half_emu = max(1, available_emu // 2)
+
     tblW = tblPr.find(qn('w:tblW'))
     if tblW is None:
         tblW = OxmlElement('w:tblW')
         tblPr.append(tblW)
-    tblW.set(qn('w:w'), str(half_twips * 2))
+    tblW.set(qn('w:w'), str(available_twips))
     tblW.set(qn('w:type'), 'dxa')
     for row in table.rows:
         for cell in row.cells:
-            cell.width = available / 2
+            cell.width = half_emu
 
 
 def _paragraph_quality(paragraph, keep_with_next=False):
