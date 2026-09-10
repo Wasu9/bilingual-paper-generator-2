@@ -223,24 +223,17 @@ def figure_assets(data):
                 if r.y1<=y1 or r.y0>=next_y or r.width>=page.rect.width*.95:continue
                 candidates.append((r,_crop_image(page,r,pad=2,scale=2)))
             option_imgs={};figure_imgs=[]
-            # Composite option panels are common in graph/chemical-structure questions.
             for r,img in candidates:
                 split=_split_composite_option(page,r,markers)
                 if split:
-                    option_imgs.update({k:(r,v) for k,v in split.items()})
-                    continue
-                # A normal option image overlaps its option marker. Body diagrams usually
-                # finish before the option-marker row, so they remain question figures.
+                    option_imgs.update({k:(r,v) for k,v in split.items()});continue
                 assigned=_assign_option_images([(r,img)],markers)
                 if assigned:
                     for k,v in assigned.items():option_imgs[k]=(r,v)
-                else:
-                    figure_imgs.append((r,img))
-            if option_imgs:
-                assets.setdefault(q,{})['options']={k:v[1] for k,v in sorted(option_imgs.items()) if 1<=k<=4}
+                else: figure_imgs.append((r,img))
+            if option_imgs: assets.setdefault(q,{})['options']={k:v[1] for k,v in sorted(option_imgs.items()) if 1<=k<=4}
             if figure_imgs:
-                r,img=max(figure_imgs,key=lambda z:z[0].width*z[0].height)
-                assets.setdefault(q,{})['figure']=img
+                r,img=max(figure_imgs,key=lambda z:z[0].width*z[0].height);assets.setdefault(q,{})['figure']=img
     return assets
 
 @st.cache_data(show_spinner=False)
@@ -281,35 +274,97 @@ def safe_vision_note():return bool(_api_key())
 def transcribe_visual(img):return vision_transcribe(img) or ocr_image(img)
 
 @st.cache_data(show_spinner=False)
-def tr(x):
-    if not x:return x
-    a=[]
-    def f(m):a.append(m.group(0));return f'PCX{len(a)-1}X'
-    try:y=GoogleTranslator(source='en',target='hi').translate(PROTECT.sub(f,x)) or x
-    except Exception:y=x
-    for i,v in enumerate(a):y=y.replace(f'PCX{i}X',v)
+def _translate_google(text):
+    for _ in range(2):
+        try:
+            y=GoogleTranslator(source='en',target='hi').translate(text)
+            if y and y.strip(): return y.strip()
+        except Exception:
+            pass
+    return ''
+
+def _translate_mymemory(text):
+    try:
+        r=requests.get('https://api.mymemory.translated.net/get',params={'q':text,'langpair':'en|hi'},timeout=20)
+        r.raise_for_status()
+        y=((r.json().get('responseData') or {}).get('translatedText') or '').strip()
+        if y and y.lower()!=text.strip().lower(): return y
+    except Exception:
+        pass
+    return ''
+
+def _restore_tokens(y,tokens):
+    for i,v in enumerate(tokens):
+        exact=f'PCX{i}X'
+        patterns=(exact,f'[{exact}]',f'{{{exact}}}',f'<{exact}>',f'PCX {i} X',f'PCX{i} X',f'PCX {i}X')
+        found=next((pat for pat in patterns if pat in y),None)
+        if found is None:return None
+        y=y.replace(found,v)
     return y
 
+def _is_formula_only(text):
+    if not text:return True
+    return not re.search(r'[A-Za-z]{3,}',PROTECT.sub('',text))
+
+def _translate_protected(text):
+    tokens=[]
+    def protect(m):
+        tokens.append(m.group(0));return f'PCX{len(tokens)-1}X'
+    masked=PROTECT.sub(protect,text)
+    if not masked.strip():return text,True
+    for method in (_translate_google,_translate_mymemory):
+        y=method(masked)
+        if not y:continue
+        restored=_restore_tokens(y,tokens)
+        if restored is None:continue
+        if restored.strip()==text.strip() and not _is_formula_only(text) and len(re.findall(r'\b[A-Za-z]{2,}\b',text))>=4:continue
+        return restored,True
+    return '[Hindi translation unavailable]',False
+
+@st.cache_data(show_spinner=False)
+def tr(x):
+    if not x:return x
+    return _translate_protected(x)[0]
+
+def _digits(text):return sorted(re.findall(r'\d+(?:\.\d+)?',text or ''))
+def _symbol_counts(text):return {c:(text or '').count(c) for c in ('%','?','=','≤','≥','≠','→','←','±','∝')}
+def _translation_issue(original,translated,label):
+    if not original:return None
+    if translated=='[Hindi translation unavailable]':return f'{label}: Hindi translation unavailable.'
+    if not _is_formula_only(original) and translated.strip()==original.strip() and len(re.findall(r'\b[A-Za-z]{2,}\b',original))>=4:return f'{label}: English text appears unchanged.'
+    if _digits(original)!=_digits(translated):return f'{label}: numerical value(s) changed or were lost.'
+    a,b=_symbol_counts(original),_symbol_counts(translated)
+    for k in a:
+        if a[k]!=b[k]:return f'{label}: symbol/punctuation {k!r} changed.'
+    return None
+
+def translation_qa(rs):
+    issues=[]
+    for q in rs:
+        items=[(f'Q{q["num"]}',q['stem'])]+[(f'Q{q["num"]} option {k}',o) for k,o in enumerate(q['options'],1) if o]
+        for label,text in items:
+            issue=_translation_issue(text,tr(text),label)
+            if issue:issues.append(issue)
+    return issues
+
 def _add_typed_run(p,text,h=False,b=False):
-    sub='₀₁₂₃₄₅₆₇₈₉'; sup='⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁽⁾'
-    pattern=re.compile(r'(\^[+-]?\d+|[₀₁₂₃₄₅₆₇₈₉]+|[⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁽⁾]+)')
+    sub='₀₁₂₃₄₅₆₇₈₉';sup='⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁽⁾';pattern=re.compile(r'(\^[+-]?\d+|[₀₁₂₃₄₅₆₇₈₉]+|[⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁽⁾]+)')
     def style(r):
-        r.font.name='Nirmala UI' if h else 'Calibri'; r.font.size=Pt(9.5); r.bold=b
-        r._element.rPr.rFonts.set(qn('w:eastAsia'),'Nirmala UI' if h else 'Calibri')
+        r.font.name='Nirmala UI' if h else 'Calibri';r.font.size=Pt(9.5);r.bold=b;r._element.rPr.rFonts.set(qn('w:eastAsia'),'Nirmala UI' if h else 'Calibri')
     pos=0
     for m in pattern.finditer(text):
         if m.start()>pos:
-            r=p.add_run(text[pos:m.start()]); style(r)
-        token=m.group(0); r=p.add_run(token[1:] if token.startswith('^') else token); style(r)
-        if token.startswith('^') or all(c in sup for c in token): r.font.superscript=True
-        else: r.font.subscript=True
+            r=p.add_run(text[pos:m.start()]);style(r)
+        token=m.group(0);r=p.add_run(token[1:] if token.startswith('^') else token);style(r)
+        if token.startswith('^') or all(c in sup for c in token):r.font.superscript=True
+        else:r.font.subscript=True
         pos=m.end()
     if pos<len(text):
-        r=p.add_run(text[pos:]); style(r)
+        r=p.add_run(text[pos:]);style(r)
 
 def run(p,t,h=False,b=False):
-    p.paragraph_format.space_after=Pt(2)
-    _add_typed_run(p,t,h,b)
+    p.paragraph_format.space_after=Pt(2);_add_typed_run(p,t,h,b)
+
 def subject_map(data):
     p=fitz.open(stream=data,filetype='pdf');starts=[]
     for page in p:
@@ -344,9 +399,7 @@ def docx(rs,bar,assets=None,subjects=None):
         cs=t.add_row().cells;qa=assets.get(q['num'],{})
         for c in cs:c.width=Inches(3.9);c.vertical_alignment=WD_CELL_VERTICAL_ALIGNMENT.TOP
         for i,h in enumerate((False,True)):
-            c=cs[i]
-            qp=c.paragraphs[0]
-            run(qp,f'{q["num"]}. ',h,True)
+            c=cs[i];qp=c.paragraphs[0];run(qp,f'{q["num"]}. ',h,True)
             if q['stem']:run(qp,tr(q['stem']) if h else q['stem'],h)
             if qa.get('figure'):add_picture_paragraph(c,qa['figure'])
             opts=[]
@@ -359,10 +412,8 @@ def docx(rs,bar,assets=None,subjects=None):
             compact=bool(opts) and len(opts)>=3 and all(len(re.sub(r'\s+',' ',x).strip())<=45 for _,x in opts) and all(len(re.sub(r'\s+',' ',opts[i][1]).strip())+len(re.sub(r'\s+',' ',opts[i+1][1]).strip())<=82 for i in range(0,len(opts)-1,2))
             if compact:
                 for z in range(0,len(opts),2):
-                    p2=c.add_paragraph();p2.paragraph_format.space_after=Pt(0)
-                    k,text=opts[z];run(p2,f'({k}) '+(tr(text) if h else text),h)
-                    if z+1<len(opts):
-                        k2,text2=opts[z+1];run(p2,'    ',h);run(p2,f'({k2}) '+(tr(text2) if h else text2),h)
+                    p2=c.add_paragraph();p2.paragraph_format.space_after=Pt(0);k,text=opts[z];run(p2,f'({k}) '+(tr(text) if h else text),h)
+                    if z+1<len(opts):k2,text2=opts[z+1];run(p2,'    ',h);run(p2,f'({k2}) '+(tr(text2) if h else text2),h)
             else:
                 for k,text in opts:
                     p2=c.add_paragraph();p2.paragraph_format.space_after=Pt(0);run(p2,f'({k}) '+(tr(text) if h else text),h)
@@ -377,7 +428,7 @@ if up:
     if not rs:st.error('No reliable numbered questions found. Scanned/image-only PDFs need OCR.')
     elif structure_issues:
         st.error('Question extraction needs review before Word generation:')
-        for issue in structure_issues: st.write('• '+issue)
+        for issue in structure_issues:st.write('• '+issue)
         st.warning('Generation is stopped to prevent a corrupted paper.')
     else:
         blank=sum(not o for q in rs for o in q['options']);visual_blank=sum(1 for q in rs for k in range(1,5) if not q['options'][k-1] and assets.get(q['num'],{}).get('options',{}).get(k))
@@ -385,7 +436,20 @@ if up:
         if blank:st.warning(f'{blank} option(s) have no extractable text. Image-based options are OCR-processed when possible; no option image is inserted.')
         if visual_blank and not safe_vision_note():st.info('Some image-based chemistry/graph options may still need a vision OCR service for exact structural transcription. The app will not guess or insert those option images.')
         if st.button('🚀 Generate Bilingual Word File',use_container_width=True):
-            out,miss=docx(rs,st.progress(0),assets,subjects);st.session_state['docx']=out;st.session_state['missing_visuals']=miss
+            with st.spinner('Checking Hindi translations and scientific notation…'):
+                translation_issues=translation_qa(rs)
+            if translation_issues:
+                st.error(f'Translation QA found {len(translation_issues)} issue(s). Word generation is stopped to prevent a corrupted bilingual paper.')
+                for issue in translation_issues[:30]:st.write('• '+issue)
+                if len(translation_issues)>30:st.write(f'• …and {len(translation_issues)-30} more issue(s).')
+                st.session_state.pop('docx',None)
+                st.session_state['translation_issues']=translation_issues
+            else:
+                st.success('Translation QA passed: protected notation, numbers and required symbols are intact.')
+                st.session_state.pop('translation_issues',None)
+                out,miss=docx(rs,st.progress(0),assets,subjects);st.session_state['docx']=out;st.session_state['missing_visuals']=miss
+        if 'translation_issues' in st.session_state and st.session_state['translation_issues']:
+            st.warning('Fix/ retry the translation before downloading. The previous Word output has been cleared.')
         if 'docx' in st.session_state:
             if st.session_state.get('missing_visuals'):st.warning('Unreliably readable image-based options were left as explicit placeholders instead of being hallucinated: '+', '.join(map(str,st.session_state['missing_visuals'])))
             st.download_button('📥 Download Word Document',st.session_state['docx'],'Bilingual_Question_Paper.docx','application/vnd.openxmlformats-officedocument.wordprocessingml.document',use_container_width=True)
