@@ -185,7 +185,7 @@ def _crop_image(page,rect,pad=2,scale=2):
 def _split_composite_option(page,rect,markers):
     centers=_marker_centers(markers)
     if len(centers)<3 or rect.width<page.rect.width*.45:return {}
-    inside=[k for k,(x,y) in centers.items() if rect.x0-12<=x<=rect.x1+12 and rect.y0-3<=y<=rect.y1+3]
+    inside=[k for k,(x,y) in centers.items() if rect.x0-30<=x<=rect.x1+30 and rect.y0-3<=y<=rect.y1+3]
     if len(inside)<3:return {}
     keys=sorted(inside,key=lambda k:centers[k][0])
     if keys != sorted(centers):return {}
@@ -203,7 +203,7 @@ def _assign_option_images(candidates,markers):
         possible=[]
         for k,(x,y) in centers.items():
             if k in used:continue
-            inside=(rect.x0-8<=x<=rect.x1+8 and rect.y0-4<=y<=rect.y1+4)
+            inside=(rect.x0-30<=x<=rect.x1+30 and rect.y0-4<=y<=rect.y1+4)
             if inside:
                 dx=max(0,rect.x0-x,x-rect.x1);dy=max(0,rect.y0-y,y-rect.y1)
                 possible.append((dx+dy,k))
