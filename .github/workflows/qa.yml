@@ -23,7 +23,7 @@ jobs:
       - name: Install test dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install python-docx PyMuPDF reportlab
+          python -m pip install python-docx PyMuPDF reportlab requests deep-translator streamlit
 
       - name: Compile critical Python modules
         run: python -m py_compile app.py final_qa.py sitecustomize.py tests/regression_suite.py tests/final_qa_suite.py tests/generate_pdf_fixtures.py tests/docx_e2e_suite.py
