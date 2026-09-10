@@ -175,24 +175,72 @@ def _pix_crop(page,rect,pad=2):
     r=fitz.Rect(max(page.rect.x0,rect.x0-pad),max(page.rect.y0,rect.y0-pad),min(page.rect.x1,rect.x1+pad),min(page.rect.y1,rect.y1+pad))
     return page.get_pixmap(matrix=fitz.Matrix(2,2),clip=r,alpha=False).tobytes('png')
 
+def _marker_centers(markers):
+    return {k:((v[1]+v[3])/2,(v[2]+v[4])/2) for k,v in markers.items()}
+
+def _crop_image(page,rect,pad=2,scale=2):
+    r=fitz.Rect(max(page.rect.x0,rect.x0-pad),max(page.rect.y0,rect.y0-pad),min(page.rect.x1,rect.x1+pad),min(page.rect.y1,rect.y1+pad))
+    return page.get_pixmap(matrix=fitz.Matrix(scale,scale),clip=r,alpha=False).tobytes('png')
+
+def _split_composite_option(page,rect,markers):
+    centers=_marker_centers(markers)
+    if len(centers)<3 or rect.width<page.rect.width*.45:return {}
+    inside=[k for k,(x,y) in centers.items() if rect.x0-12<=x<=rect.x1+12 and rect.y0-3<=y<=rect.y1+3]
+    if len(inside)<3:return {}
+    keys=sorted(inside,key=lambda k:centers[k][0])
+    if keys != sorted(centers):return {}
+    xs=[centers[k][0] for k in keys]
+    bounds=[rect.x0]+[(xs[i]+xs[i+1])/2 for i in range(len(xs)-1)]+[rect.x1]
+    out={}
+    for k,x0,x1 in zip(keys,bounds,bounds[1:]):
+        if x1-x0<18:continue
+        out[k]=_crop_image(page,fitz.Rect(x0,rect.y0,x1,rect.y1),pad=1)
+    return out if len(out)>=3 else {}
+
+def _assign_option_images(candidates,markers):
+    centers=_marker_centers(markers);out={};used=set()
+    for rect,img in sorted(candidates,key=lambda z:(z[0].y0,z[0].x0)):
+        possible=[]
+        for k,(x,y) in centers.items():
+            if k in used:continue
+            inside=(rect.x0-8<=x<=rect.x1+8 and rect.y0-4<=y<=rect.y1+4)
+            if inside:
+                dx=max(0,rect.x0-x,x-rect.x1);dy=max(0,rect.y0-y,y-rect.y1)
+                possible.append((dx+dy,k))
+        if possible:
+            _,k=min(possible);out[k]=img;used.add(k)
+    return out
+
 def figure_assets(data):
     p=fitz.open(stream=data,filetype='pdf');assets={}
     for page in p:
         qs=_q_ranges(page);imgs=_small_images(page)
         for idx,(q,y0,y1) in enumerate(qs):
             next_y=qs[idx+1][1] if idx+1<len(qs) else page.rect.y1
-            markers=_option_markers(page,y0,next_y);marker_y=[v[2] for v in markers.values()]
-            candidates=[(r,x) for r,x in imgs if r.y1>y1 and r.y0<next_y and r.width<page.rect.width*.55]
-            option_imgs=[];figure_imgs=[]
-            for z in candidates:
-                cy=(z[0].y0+z[0].y1)/2;near=min([abs(cy-my) for my in marker_y],default=999)
-                (option_imgs if len(marker_y)>=2 and near<=58 else figure_imgs).append(z)
-            if len(option_imgs)>=3:
-                option_imgs.sort(key=lambda z:(round(z[0].y0/12)*12,z[0].x0));assets.setdefault(q,{})['options']={k:_pix_crop(page,z[0]) for k,z in enumerate(option_imgs[:4],1)}
-                if figure_imgs:
-                    r,x=max(figure_imgs,key=lambda z:z[0].width*z[0].height);assets[q]['figure']=_pix_crop(page,r)
-            elif figure_imgs:
-                r,x=max(figure_imgs,key=lambda z:z[0].width*z[0].height);assets.setdefault(q,{})['figure']=_pix_crop(page,r)
+            markers=_option_markers(page,y0,next_y)
+            candidates=[]
+            for r,x in imgs:
+                if r.y1<=y1 or r.y0>=next_y or r.width>=page.rect.width*.95:continue
+                candidates.append((r,_crop_image(page,r,pad=2,scale=2)))
+            option_imgs={};figure_imgs=[]
+            # Composite option panels are common in graph/chemical-structure questions.
+            for r,img in candidates:
+                split=_split_composite_option(page,r,markers)
+                if split:
+                    option_imgs.update({k:(r,v) for k,v in split.items()})
+                    continue
+                # A normal option image overlaps its option marker. Body diagrams usually
+                # finish before the option-marker row, so they remain question figures.
+                assigned=_assign_option_images([(r,img)],markers)
+                if assigned:
+                    for k,v in assigned.items():option_imgs[k]=(r,v)
+                else:
+                    figure_imgs.append((r,img))
+            if option_imgs:
+                assets.setdefault(q,{})['options']={k:v[1] for k,v in sorted(option_imgs.items()) if 1<=k<=4}
+            if figure_imgs:
+                r,img=max(figure_imgs,key=lambda z:z[0].width*z[0].height)
+                assets.setdefault(q,{})['figure']=img
     return assets
 
 @st.cache_data(show_spinner=False)
@@ -219,7 +267,7 @@ def vision_transcribe(img):
     if not key:return ''
     try:
         b64=base64.b64encode(img).decode('ascii')
-        payload={'model':'gpt-5.6-luna','input':[{'role':'user','content':[{'type':'input_text','text':'Transcribe this exam-paper figure/option into precise editable plain text. Do not omit symbols. For a chemical structure, give a compact unambiguous description or SMILES plus visible substituents. For a graph, state axes, curve direction and labels. For a circuit, state components and connections. Never invent unreadable values; use [unclear] instead.'},{'type':'input_image','image_url':f'data:image/png;base64,{b64}'}]}],'max_output_tokens':700}
+        payload={'model':'gpt-5.6-luna','input':[{'role':'user','content':[{'type':'input_text','text':'Transcribe this exam-paper visual into precise editable text for a question paper. Preserve every visible symbol, charge, subscript, superscript, bond, arrow, label, axis, scale and numerical value. If it is a chemical structure, describe the structure left-to-right with bond types and substituents; include a SMILES form when unambiguous, otherwise use [unclear] for unreadable parts. If it is a graph, state x/y axes, labels, intercepts, slope/curve shape, marked points and values. If it is a circuit, state every component and its connections. If it is a mathematical diagram, transcribe equations and labels exactly. Do not guess missing information. Return only the transcription, with no commentary.'},{'type':'input_image','image_url':f'data:image/png;base64,{b64}'}]}],'max_output_tokens':700}
         r=requests.post('https://api.openai.com/v1/responses',headers={'Authorization':f'Bearer {key}','Content-Type':'application/json'},json=payload,timeout=45);r.raise_for_status();j=r.json()
         if isinstance(j.get('output_text'),str):return j['output_text'].strip()
         parts=[]
