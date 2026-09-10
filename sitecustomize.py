@@ -1,11 +1,12 @@
-"""PaperCraft AI Phase 5: transparent Word layout hardening.
+"""PaperCraft AI Phase 7: Master Page + stable PageMaker-style Word flow.
 
-Python imports sitecustomize automatically when the repository root is on sys.path.
-This module deliberately post-processes only python-docx documents created by the app;
-it does not alter the PaperCraft UI or parsing/translation/visual pipelines.
+This post-processor keeps the existing PaperCraft UI, parser, translation and visual
+pipelines unchanged. It hardens the generated DOCX for print/edit workflows by adding
+repeatable master-page header/footer geometry, stable two-column table geometry,
+non-splitting logical question rows, and pagination-safe paragraph rules.
 """
 from docx import document as _document_module
-from docx.enum.text import WD_BREAK
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Pt
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
@@ -14,8 +15,7 @@ _ORIGINAL_SAVE = _document_module.Document.save
 
 
 def _set_cell_margins(cell, top=55, start=65, bottom=55, end=65):
-    tc = cell._tc
-    tcPr = tc.get_or_add_tcPr()
+    tcPr = cell._tc.get_or_add_tcPr()
     tcMar = tcPr.first_child_found_in('w:tcMar')
     if tcMar is None:
         tcMar = OxmlElement('w:tcMar')
@@ -41,7 +41,7 @@ def _repeat_header(row):
         trPr.append(OxmlElement('w:tblHeader'))
 
 
-def _fixed_table(table):
+def _fixed_table(table, section):
     tblPr = table._tbl.tblPr
     layout = tblPr.find(qn('w:tblLayout'))
     if layout is None:
@@ -50,11 +50,24 @@ def _fixed_table(table):
     layout.set(qn('w:type'), 'fixed')
     table.autofit = False
 
+    available = section.page_width - section.left_margin - section.right_margin - section.gutter
+    half_twips = max(1, int(available / 2))
+    tblW = tblPr.find(qn('w:tblW'))
+    if tblW is None:
+        tblW = OxmlElement('w:tblW')
+        tblPr.append(tblW)
+    tblW.set(qn('w:w'), str(half_twips * 2))
+    tblW.set(qn('w:type'), 'dxa')
+    for row in table.rows:
+        for cell in row.cells:
+            cell.width = available / 2
+
 
 def _paragraph_quality(paragraph, keep_with_next=False):
     pf = paragraph.paragraph_format
     pf.widow_control = True
-    pf.keep_with_next = keep_with_next
+    if keep_with_next:
+        pf.keep_with_next = True
     if pf.space_after is None:
         pf.space_after = Pt(2)
     for r in paragraph.runs:
@@ -62,33 +75,62 @@ def _paragraph_quality(paragraph, keep_with_next=False):
             r.font.size = Pt(9.5)
 
 
+def _page_field(paragraph):
+    run = paragraph.add_run()
+    fld = OxmlElement('w:fldSimple')
+    fld.set(qn('w:instr'), 'PAGE')
+    run._r.append(fld)
+
+
+def _master_page(section):
+    section.header_distance = Pt(8)
+    section.footer_distance = Pt(8)
+
+    header = section.header
+    hp = header.paragraphs[0]
+    hp.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    hp.text = ''
+    r = hp.add_run('PaperCraft AI  •  Bilingual Question Paper')
+    r.font.name = 'Calibri'
+    r.font.size = Pt(8)
+    r.bold = True
+
+    footer = section.footer
+    fp = footer.paragraphs[0]
+    fp.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    fp.text = ''
+    r = fp.add_run('PaperCraft AI  •  Page ')
+    r.font.name = 'Calibri'
+    r.font.size = Pt(8)
+    _page_field(fp)
+    for r in fp.runs:
+        r.font.name = 'Calibri'
+        r.font.size = Pt(8)
+
+
 def _harden_document(doc):
     for section in doc.sections:
-        # Keep the existing compact paper margins, but make header/footer clearance explicit.
-        section.header_distance = Pt(10)
-        section.footer_distance = Pt(10)
+        section.header_distance = Pt(8)
+        section.footer_distance = Pt(8)
+        _master_page(section)
 
     for table in doc.tables:
-        _fixed_table(table)
+        section = doc.sections[0]
+        _fixed_table(table, section)
         if table.rows:
             _repeat_header(table.rows[0])
-
-        # A question is one logical unit: prevent Word from cutting the table row itself.
-        # Word can still move an oversized row to the next page rather than corrupting it.
         for row in table.rows:
             _cant_split(row)
             for cell in row.cells:
                 _set_cell_margins(cell)
                 for paragraph in cell.paragraphs:
-                    # Keep the question line attached to following option paragraphs.
                     text = (paragraph.text or '').strip()
                     is_question = bool(text[:4].split('.')[0].isdigit() and '.' in text[:5])
-                    _paragraph_quality(paragraph, keep_with_next=is_question)
-                    # Prevent accidental blank paragraphs from consuming layout space.
+                    is_subject = bool(text) and len(text) < 40 and not text.startswith(('(', '['))
+                    _paragraph_quality(paragraph, keep_with_next=(is_question or is_subject))
                     if not text:
                         paragraph.paragraph_format.space_after = Pt(0)
 
-    # Apply a conservative default to all runs without overriding the app's Hindi font.
     for paragraph in doc.paragraphs:
         _paragraph_quality(paragraph)
 
@@ -98,7 +140,5 @@ def _patched_save(self, path_or_stream):
     return _ORIGINAL_SAVE(self, path_or_stream)
 
 
-# Patch the class method once. The app's existing `from docx import Document`
-# resolves to the same python-docx Document implementation.
 if _document_module.Document.save is not _patched_save:
     _document_module.Document.save = _patched_save
