@@ -136,6 +136,11 @@ def _docx_text(cell):
     return "\n".join((p.text or "").strip() for p in cell.paragraphs if (p.text or "").strip()).strip()
 
 
+def _content_without_question_number(text):
+    """Remove the leading printed question number before cross-column QA."""
+    return re.sub(r"^\s*\d{1,3}\.\s*", "", text or "", count=1)
+
+
 def final_docx_qa(docx_bytes):
     """Validate the actual generated DOCX before it becomes downloadable.
 
@@ -192,9 +197,10 @@ def final_docx_qa(docx_bytes):
         elif re.search(r"[A-Za-z]{3,}", en) and hi.strip() == en.strip():
             errors.append(f"Q{n}: final Hindi question cell appears unchanged.")
 
-        if _numbers(en) != _numbers(hi):
+        en_content = _content_without_question_number(en)
+        if _numbers(en_content) != _numbers(hi):
             errors.append(f"Q{n}: final DOCX numerical value(s) changed or were lost between English and Hindi.")
-        a, b = _symbols(en), _symbols(hi)
+        a, b = _symbols(en_content), _symbols(hi)
         for symbol, count in a.items():
             if count != b[symbol]:
                 errors.append(f"Q{n}: final DOCX symbol {symbol!r} changed between English and Hindi.")
