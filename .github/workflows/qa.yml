@@ -26,7 +26,7 @@ jobs:
           python -m pip install python-docx PyMuPDF reportlab
 
       - name: Compile critical Python modules
-        run: python -m py_compile app.py final_qa.py sitecustomize.py tests/regression_suite.py tests/final_qa_suite.py tests/generate_pdf_fixtures.py
+        run: python -m py_compile app.py final_qa.py sitecustomize.py tests/regression_suite.py tests/final_qa_suite.py tests/generate_pdf_fixtures.py tests/docx_e2e_suite.py
 
       - name: Generate PDF regression fixtures
         run: python tests/generate_pdf_fixtures.py tests/fixtures
@@ -36,3 +36,6 @@ jobs:
 
       - name: Run final QA regression suite
         run: PYTHONPATH=. python tests/final_qa_suite.py
+
+      - name: Run DOCX end-to-end regression suite
+        run: PYTHONPATH=. python tests/docx_e2e_suite.py
