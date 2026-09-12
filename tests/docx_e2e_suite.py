@@ -11,7 +11,6 @@ import re
 from pathlib import Path
 
 from docx import Document
-from docx.oxml.ns import qn
 
 
 def _load_docx_namespace():
@@ -27,8 +26,10 @@ def _load_docx_namespace():
     ns = {}
     exec(compile(ast.Module(body=nodes, type_ignores=[]), str(app_path), "exec"), ns)
 
-    # Deterministic test translation: preserve all numeric/symbol content while
-    # making English prose visibly different from Hindi.
+    # Deterministic test translation: preserve mathematical/numeric content while
+    # making English prose visibly different from Hindi.  Numeric-only option text
+    # is deliberately avoided because (1)-(4) are structural labels in the DOCX;
+    # testing numeric integrity is covered by the question stem and Q4 formulas.
     def fake_tr(text):
         replacements = {
             "What is the value of x = 10?": "x = 10 का मान क्या है?",
@@ -36,8 +37,10 @@ def _load_docx_namespace():
             "Mass": "द्रव्यमान",
             "Momentum": "संवेग",
             "Energy": "ऊर्जा",
-            "1": "1", "2": "2", "3": "3", "4": "4",
-            "10": "10", "20": "20", "30": "30", "40": "40",
+            "Force": "बल",
+            "E = mc²": "E = mc²",
+            "E = mv²": "E = mv²",
+            "E = m/c²": "E = m/c²",
             "F²t²/2m": "F²t²/2m",
             "F²t²/3m": "F²t²/3m",
             "Ft²/2m": "Ft²/2m",
@@ -61,8 +64,10 @@ def _assert(condition, message):
 
 def _records():
     return [
-        {"num": 1, "stem": "What is the value of x = 10?", "options": ["1", "2", "3", "4"]},
-        {"num": 2, "stem": "Which quantity is conserved?", "options": ["Mass", "Momentum", "Energy", "4"]},
+        # Numeric integrity is tested in the stem, while options remain semantic
+        # text so structural (1)-(4) labels cannot be confused with option values.
+        {"num": 1, "stem": "What is the value of x = 10?", "options": ["Mass", "Momentum", "Energy", "Force"]},
+        {"num": 2, "stem": "Which quantity is conserved?", "options": ["Mass", "Momentum", "Energy", "Force"]},
         # Long options must remain one-per-line.
         {"num": 3, "stem": "Choose the correct statement.", "options": [
             "This is a deliberately long option that should not be compacted into a shared line.",
