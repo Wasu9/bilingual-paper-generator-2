@@ -1,7 +1,7 @@
 """Final QA helpers for PaperCraft AI.
 
 The module is intentionally side-effect free so it can be used both before
-DOCX generation (source records) and after generation (the actual DOCX bytes).
+after generation (source records) and after generation (the actual DOCX bytes).
 """
 import io
 import re
@@ -20,21 +20,18 @@ def _symbols(text):
 
 
 def _without_option_markers(text):
-    """Remove the structural (1)-(4) labels before cross-column integrity QA."""
+    """Remove structural (1)-(4) labels before cross-column integrity QA."""
     return OPTION_RE.sub("", text or "")
 
 
 def question_structure_qa(records):
-    """Return critical structural issues for parsed question records."""
     issues = []
     if not records:
         return ["No questions were generated."]
-
     nums = [int(q.get("num", 0)) for q in records]
     expected = list(range(1, max(nums) + 1))
     missing = [n for n in expected if n not in nums]
     duplicate = sorted({n for n in nums if nums.count(n) > 1})
-
     if nums[0] != 1:
         issues.append(f"Sequence starts at {nums[0]}, not 1.")
     if missing:
@@ -43,13 +40,11 @@ def question_structure_qa(records):
         issues.append("Duplicate question number(s): " + ", ".join(map(str, duplicate[:20])))
     if nums != sorted(nums):
         issues.append("Question numbers are out of order.")
-
     for q in records:
         n = q.get("num")
         stem = (q.get("stem") or "").strip()
         if not stem:
             issues.append(f"Q{n}: empty question text.")
-
         options = q.get("options") or []
         if len(options) != 4:
             issues.append(f"Q{n}: expected 4 option slots, found {len(options)}.")
@@ -59,16 +54,13 @@ def question_structure_qa(records):
                 issues.append(f"Q{n}: option ({k + 1}) is empty in extracted text.")
             if LETTER_OPTION_RE.search(text):
                 issues.append(f"Q{n}: option ({k + 1}) contains an A/B/C/D-style marker.")
-
         whole = " ".join([stem] + [str(x or "") for x in options])
         if LETTER_OPTION_RE.search(whole):
             issues.append(f"Q{n}: accidental A/B/C/D option marker detected.")
-
     return issues
 
 
 def translation_integrity_qa(records, translate):
-    """Check Hindi output without requiring any particular translation service."""
     issues = []
     for q in records:
         n = q.get("num")
@@ -95,7 +87,6 @@ def translation_integrity_qa(records, translate):
 
 
 def visual_output_qa(records, assets=None, missing_visuals=None):
-    """Report unresolved visual transcription problems as warnings."""
     assets = assets or {}
     missing = set(missing_visuals or [])
     warnings = []
@@ -111,13 +102,11 @@ def visual_output_qa(records, assets=None, missing_visuals=None):
 
 
 def placeholder_qa(records, assets=None):
-    """Find unresolved explicit placeholders in generated source content."""
     issues = []
     for q in records:
         n = q.get("num")
         for label, text in [(f"Q{n}", q.get("stem") or "")] + [
-            (f"Q{n} option {i}", x or "")
-            for i, x in enumerate(q.get("options") or [], 1)
+            (f"Q{n} option {i}", x or "") for i, x in enumerate(q.get("options") or [], 1)
         ]:
             if PLACEHOLDER_RE.search(text):
                 issues.append(f"{label}: unresolved placeholder present.")
@@ -125,7 +114,6 @@ def placeholder_qa(records, assets=None):
 
 
 def final_paper_qa(records, translate=None, assets=None, missing_visuals=None):
-    """Return (critical_errors, warnings) for the source-record pipeline."""
     errors = question_structure_qa(records)
     warnings = []
     if translate is not None:
@@ -142,17 +130,12 @@ def _docx_text(cell):
 
 
 def _content_without_question_number(text):
-    """Remove the leading printed question number before cross-column QA."""
+    """Remove a leading printed question number from either language column."""
     return re.sub(r"^\s*\d{1,3}\.\s*", "", text or "", count=1)
 
 
 def final_docx_qa(docx_bytes):
-    """Validate the actual generated DOCX before it becomes downloadable.
-
-    Returns ``(errors, warnings)``.  The checks intentionally operate on the
-    rendered document structure rather than the pre-generation records, so this
-    catches corruption introduced during Word generation/layout processing.
-    """
+    """Validate the actual generated DOCX before it becomes downloadable."""
     errors, warnings = [], []
     try:
         from docx import Document
@@ -202,8 +185,13 @@ def final_docx_qa(docx_bytes):
         elif re.search(r"[A-Za-z]{3,}", en) and hi.strip() == en.strip():
             errors.append(f"Q{n}: final Hindi question cell appears unchanged.")
 
+        # The question number is document structure, not question content.  It
+        # must therefore be removed from BOTH columns before integrity checks.
+        # This also handles DOCX generators that repeat the printed number in
+        # the Hindi cell, while preserving genuine numeric values such as 10,
+        # 20, 10^-3, etc. inside the actual question/options.
         en_content = _without_option_markers(_content_without_question_number(en))
-        hi_content = _without_option_markers(hi)
+        hi_content = _without_option_markers(_content_without_question_number(hi))
         if _numbers(en_content) != _numbers(hi_content):
             errors.append(f"Q{n}: final DOCX numerical value(s) changed or were lost between English and Hindi.")
         a, b = _symbols(en_content), _symbols(hi_content)
