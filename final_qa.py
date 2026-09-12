@@ -19,6 +19,11 @@ def _symbols(text):
     return {c: (text or "").count(c) for c in ("%", "=", "≤", "≥", "≠", "→", "←", "±", "∝")}
 
 
+def _without_option_markers(text):
+    """Remove the structural (1)-(4) labels before cross-column integrity QA."""
+    return OPTION_RE.sub("", text or "")
+
+
 def question_structure_qa(records):
     """Return critical structural issues for parsed question records."""
     issues = []
@@ -197,10 +202,11 @@ def final_docx_qa(docx_bytes):
         elif re.search(r"[A-Za-z]{3,}", en) and hi.strip() == en.strip():
             errors.append(f"Q{n}: final Hindi question cell appears unchanged.")
 
-        en_content = _content_without_question_number(en)
-        if _numbers(en_content) != _numbers(hi):
+        en_content = _without_option_markers(_content_without_question_number(en))
+        hi_content = _without_option_markers(hi)
+        if _numbers(en_content) != _numbers(hi_content):
             errors.append(f"Q{n}: final DOCX numerical value(s) changed or were lost between English and Hindi.")
-        a, b = _symbols(en_content), _symbols(hi)
+        a, b = _symbols(en_content), _symbols(hi_content)
         for symbol, count in a.items():
             if count != b[symbol]:
                 errors.append(f"Q{n}: final DOCX symbol {symbol!r} changed between English and Hindi.")
