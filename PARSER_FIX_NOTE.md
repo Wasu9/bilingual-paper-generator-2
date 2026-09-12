@@ -1,1 +1,0 @@
-Parser bug identified: OCR can produce an internal numeric fragment such as `6 is =` inside Q71 immediately before the real Q72 marker. The sequential question-run logic must skip such a lower-number candidate when the expected next question number appears within the next few candidates, while preserving genuine sequential numbering.
